@@ -161,7 +161,7 @@ $!F10::Send("{F10}")
 #HotIf WinActive("ahk_class CASCADIA_HOSTING_WINDOW_CLASS")
 #F1:: { ; Added '#' here for the Windows key modifier
     activeHWnd := WinExist("A")
-    targetWidth := A_ScreenWidth * (2/3)
+    targetWidth := A_ScreenWidth * 0.75
     targetHeight := A_ScreenHeight * 0.85
     targetX := 25
     targetY := 25
