@@ -51,11 +51,18 @@ if !A_IsAdmin {
 }
 
 #HotIf WinActive("Settings ahk_class ApplicationFrameWindow")
-F1:: {
+#F1:: {
     activeWin := WinExist("A") 
     if activeWin {
         WinMove(0, 7, 495, 700, "ahk_id " activeWin)
     }
+}
+
+#HotIf ; Reset context to default
+
+#HotIf WinActive("ahk_exe Dimmer.exe")
+#F1:: {
+    WinMove(7, 709, , , "A")
 }
 
 #HotIf ; Reset context to default
@@ -162,9 +169,9 @@ $!F10::Send("{F10}")
 #F1:: { ; Added '#' here for the Windows key modifier
     activeHWnd := WinExist("A")
     targetWidth := A_ScreenWidth * 0.75
-    targetHeight := A_ScreenHeight * 0.85
+    targetHeight := A_ScreenHeight * 0.85 
     targetX := 25
-    targetY := 25
+    targetY := 25 + 7
 
     WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
 }
