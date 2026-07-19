@@ -5,6 +5,7 @@
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+#Warn VarUnset, Off  ; Suppress false positive on built-in A_* variables
 SetTitleMatchMode 2  ; Partial matching for window title criteria
 
 ; ═══ ADMIN ESCALATION ═════════════════════════════════════════════════════════
@@ -18,31 +19,30 @@ if !A_IsAdmin {
 ; Tunable values — edit these to adjust behavior without touching logic.
 
 ; Terminal opacity toggle
-global OPACITY_HIGH := 90
-global OPACITY_LOW  := 65
+OPACITY_HIGH := 90
+OPACITY_LOW  := 65
 
 ; Terminal settings.json path (Windows Terminal)
-global TERMINAL_SETTINGS_PATH := A_AppDataLocal
-    . "\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+TERMINAL_SETTINGS_PATH := EnvGet("LOCALAPPDATA") . "\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 
 ; Win+F1: Resize Windows Terminal
-global TERMINAL_WIDTH_PCT  := 0.75
-global TERMINAL_HEIGHT_PCT := 0.85
-global TERMINAL_OFFSET_X   := 25
-global TERMINAL_OFFSET_Y   := 32
+TERMINAL_WIDTH_PCT  := 0.75
+TERMINAL_HEIGHT_PCT := 0.85
+TERMINAL_OFFSET_X   := 25
+TERMINAL_OFFSET_Y   := 32
 
 ; Win+F1: Snap Task Manager to right side of Monitor 1
-global TASKMANAGER_WIDTH_PCT := 0.58
+TASKMANAGER_WIDTH_PCT := 0.58
 
 ; Win+F1: Reposition Settings app
-global SETTINGS_X := 0
-global SETTINGS_Y := 7
-global SETTINGS_W := 495
-global SETTINGS_H := 700
+SETTINGS_X := 0
+SETTINGS_Y := 7
+SETTINGS_W := 495
+SETTINGS_H := 700
 
 ; Win+F1: Reposition Dimmer
-global DIMMER_X := 7
-global DIMMER_Y := 709
+DIMMER_X := 7
+DIMMER_Y := 709
 
 ; ═══ SYSTEM SHORTCUTS ═════════════════════════════════════════════════════════
 
@@ -185,7 +185,7 @@ $!F10::Send("{F10}")
         targetHeight := monitorHeight + 9
 
         ; Flush against the right edge, vertically centered
-        targetX := right - targetWidth + 8
+        targetX := right - targetWidth + 7
         targetY := top - 1
 
         WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
