@@ -196,11 +196,11 @@ $!F10::Send("{F10}")
         
         ; Calculate target size (55% width, 100% height)
         targetWidth := monitorWidth * 0.58
-        targetHeight := monitorHeight + 7
+        targetHeight := monitorHeight + 9
         
         ; Position it flush against the right edge of Monitor 1
-        targetX := right - targetWidth + 7
-        targetY := top
+        targetX := right - targetWidth + 8
+        targetY := top - 1
         
         ; Move and resize
         WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
@@ -210,4 +210,6 @@ $!F10::Send("{F10}")
     }
 }
 
+#HotIf
+!4::SendText("#")
 #HotIf
