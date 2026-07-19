@@ -1,0 +1,232 @@
+﻿; STD_HotKeys.ahk ──────────────────────────────────────────────────────────────
+; Personal hotkey customizations for Windows.
+; Requires AutoHotkey v2.0
+; ──────────────────────────────────────────────────────────────────────────────
+
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+SetTitleMatchMode 2  ; Partial matching for window title criteria
+
+; ═══ ADMIN ESCALATION ═════════════════════════════════════════════════════════
+; Re-launches the script with admin privileges if not already elevated.
+if !A_IsAdmin {
+    Run('*RunAs "' A_ScriptFullPath '"')
+    ExitApp()
+}
+
+; ═══ CONFIGURATION ════════════════════════════════════════════════════════════
+; Tunable values — edit these to adjust behavior without touching logic.
+
+; Terminal opacity toggle
+global OPACITY_HIGH := 90
+global OPACITY_LOW  := 65
+
+; Terminal settings.json path (Windows Terminal)
+global TERMINAL_SETTINGS_PATH := A_AppDataLocal
+    . "\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+
+; Win+F1: Resize Windows Terminal
+global TERMINAL_WIDTH_PCT  := 0.75
+global TERMINAL_HEIGHT_PCT := 0.85
+global TERMINAL_OFFSET_X   := 25
+global TERMINAL_OFFSET_Y   := 32
+
+; Win+F1: Snap Task Manager to right side of Monitor 1
+global TASKMANAGER_WIDTH_PCT := 0.58
+
+; Win+F1: Reposition Settings app
+global SETTINGS_X := 0
+global SETTINGS_Y := 7
+global SETTINGS_W := 495
+global SETTINGS_H := 700
+
+; Win+F1: Reposition Dimmer
+global DIMMER_X := 7
+global DIMMER_Y := 709
+
+; ═══ SYSTEM SHORTCUTS ═════════════════════════════════════════════════════════
+
+; Ctrl+Alt+Win+ñ — Reload the script
+^#!ñ::
+{
+    MsgBox("Script reloaded!", "Success", "Iconi T1")
+    Reload()
+}
+
+; Ctrl+Alt+Win+p — Open this script in the default editor
+^#!p::
+{
+    Run('edit "' A_ScriptFullPath '"')
+}
+
+; Ctrl+Win+T — Launch Windows Terminal
+^#t:: {
+    Run("shell:AppsFolder\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App")
+}
+
+; Ctrl+Alt+Shift+Win (all combos) — Block Office/M365 global intercept.
+; Prevents the key combo from launching m365.cloud.microsoft on release.
+#^!Shift::
+#^+Alt::
+#!+Ctrl::
+^!+LWin:: {
+    Send("{Blind}{vk07}")
+}
+
+; ═══ KEY REMAPS ═══════════════════════════════════════════════════════════════
+
+; CapsLock → Left Shift (global passthrough)
+*CapsLock:: {
+    Send "{Blind}{LShift DownR}"
+}
+
+*CapsLock up:: {
+    Send "{Blind}{LShift Up}"
+}
+
+; While CapsLock is physically held: Esc toggles the actual CapsLock state/light
+#HotIf GetKeyState("CapsLock", "P")
+*Esc:: {
+    SetCapsLockState(!GetKeyState("CapsLock", "T"))
+}
+#HotIf  ; ── end context ──
+
+; F2 sends 3
+$F2::Send("3")
+
+; Alt+F2 sends the real F2
+$!F2::Send("{F2}")
+
+; F10 sends 9
+$F10::Send("9")
+
+; Shift+F10 sends )
+$+F10::Send(")")
+
+; Alt+F10 sends the real F10
+$!F10::Send("{F10}")
+
+; Alt+4 sends # (hash)
+!4::SendText("#")
+
+; ═══ TERMINAL OPACITY ═════════════════════════════════════════════════════════
+; Alt+F1 toggles Windows Terminal opacity by rewriting its settings.json.
+; Cycles: 90% → 65% → whatever was set → 90%.
+
+#HotIf WinActive("ahk_exe WindowsTerminal.exe")
+!F1:: {
+    if !FileExist(TERMINAL_SETTINGS_PATH) {
+        return
+    }
+
+    fileContent := FileRead(TERMINAL_SETTINGS_PATH)
+
+    if InStr(fileContent, '"opacity": ' OPACITY_HIGH) {
+        fileContent := StrReplace(fileContent, '"opacity": ' OPACITY_HIGH, '"opacity": ' OPACITY_LOW)
+    } else if InStr(fileContent, '"opacity": ' OPACITY_LOW) {
+        fileContent := StrReplace(fileContent, '"opacity": ' OPACITY_LOW, '"opacity": ' OPACITY_HIGH)
+    } else {
+        fileContent := RegExReplace(fileContent, '"opacity":\s*\d+', '"opacity": ' OPACITY_HIGH)
+    }
+
+    try {
+        FileObj := FileOpen(TERMINAL_SETTINGS_PATH, "w", "UTF-8")
+        FileObj.Write(fileContent)
+        FileObj.Close()
+    } catch as err {
+        ToolTip("Failed to write Terminal settings: " err.Message)
+        SetTimer(() => ToolTip(), -3000)
+    }
+}
+#HotIf  ; ── end context ──
+
+; ═══ WINDOW MANAGEMENT ════════════════════════════════════════════════════════
+; Win+F1 snaps/resizes the active window depending on which app is focused.
+
+; Win+F1: Resize Settings app to fixed position
+#HotIf WinActive("Settings ahk_class ApplicationFrameWindow")
+#F1:: {
+    activeWin := WinExist("A")
+    if activeWin {
+        WinMove(SETTINGS_X, SETTINGS_Y, SETTINGS_W, SETTINGS_H, "ahk_id " activeWin)
+    }
+}
+#HotIf  ; ── end context ──
+
+; Win+F1: Reposition Dimmer to bottom-left of screen
+#HotIf WinActive("ahk_exe Dimmer.exe")
+#F1:: {
+    WinMove(DIMMER_X, DIMMER_Y, , , "A")
+}
+#HotIf  ; ── end context ──
+
+; Win+F1: Resize Windows Terminal to 75% × 85% of screen, offset from top-left
+#HotIf WinActive("ahk_class CASCADIA_HOSTING_WINDOW_CLASS")
+#F1:: {
+    activeHWnd := WinExist("A")
+    targetWidth  := A_ScreenWidth * TERMINAL_WIDTH_PCT
+    targetHeight := A_ScreenHeight * TERMINAL_HEIGHT_PCT
+    WinMove(TERMINAL_OFFSET_X, TERMINAL_OFFSET_Y, targetWidth, targetHeight, activeHWnd)
+}
+#HotIf  ; ── end context ──
+
+; Win+F1: Snap Task Manager to right 58% of Monitor 1
+#HotIf WinActive("ahk_class TaskManagerWindow")
+#F1:: {
+    activeHWnd := WinExist("A")
+
+    try {
+        MonitorGetWorkArea(1, &left, &top, &right, &bottom)
+
+        monitorWidth  := right - left
+        monitorHeight := bottom - top
+
+        targetWidth  := monitorWidth * TASKMANAGER_WIDTH_PCT
+        targetHeight := monitorHeight + 9
+
+        ; Flush against the right edge, vertically centered
+        targetX := right - targetWidth + 8
+        targetY := top - 1
+
+        WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
+    } catch {
+        ToolTip("Failed to detect Monitor 1.")
+        SetTimer(() => ToolTip(), -2000)
+    }
+}
+#HotIf  ; ── end context ──
+
+; ═══ DEBUG TOOLS ══════════════════════════════════════════════════════════════
+
+; Ctrl+Alt+Shift+Win+. — Show active window info (title, class, process, position, size)
+^!+#.:: {
+    activeHWnd := WinExist("A")
+    if !activeHWnd {
+        ToolTip("No active window detected.")
+        SetTimer(() => ToolTip(), -2000)
+        return
+    }
+
+    winTitle   := WinGetTitle(activeHWnd)
+    winClass   := WinGetClass(activeHWnd)
+    winProcess := WinGetProcessName(activeHWnd)
+
+    WinGetPos(&x, &y, &width, &height, activeHWnd)
+
+    debugMsg := "
+    (
+        Active Window Stats:
+        ---------------------------------
+        Title:    `t{1}
+        Class:    `tahk_class {2}
+        Process:  `t{3}
+        ID:       `tahk_id {4}
+
+        Position: `tX: {5}, Y: {6}
+        Size:     `tW: {7}, H: {8}
+    )"
+
+    formattedMsg := Format(debugMsg, winTitle, winClass, winProcess, activeHWnd, x, y, width, height)
+
+    MsgBox(formattedMsg, "Window Info Debugger", "64")
+}
