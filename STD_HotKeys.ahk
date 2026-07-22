@@ -73,6 +73,16 @@ DIMMER_Y := 709
     Send("{Blind}{vk07}")
 }
 
+; Ctrl+Alt+Win+Left — Previous media track
+^#!Left:: {
+    Send("{Media_Prev}")
+}
+
+; Ctrl+Alt+Win+Right — Next media track
+^#!Right:: {
+    Send("{Media_Next}")
+}
+
 ; ═══ KEY REMAPS ═══════════════════════════════════════════════════════════════
 
 ; CapsLock → Left Shift (global passthrough)
