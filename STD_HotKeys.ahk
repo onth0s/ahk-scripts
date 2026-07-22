@@ -83,6 +83,16 @@ DIMMER_Y := 709
     Send("{Media_Next}")
 }
 
+; Ctrl+Alt+Win+Up — Volume up by 1
+^#!Up:: {
+    SoundSetVolume("+1")
+}
+
+; Ctrl+Alt+Win+Down — Volume down by 1
+^#!Down:: {
+    SoundSetVolume("-1")
+}
+
 ; ═══ KEY REMAPS ═══════════════════════════════════════════════════════════════
 
 ; CapsLock → Left Shift (global passthrough)
