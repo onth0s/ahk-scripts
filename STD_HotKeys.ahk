@@ -126,6 +126,9 @@ $+F10::Send(")")
 ; Alt+F10 sends the real F10
 $!F10::Send("{F10}")
 
+; Ctrl+Numpad1 sends 4
+$^Numpad1::Send("4")
+
 ; Alt+4 sends # (hash)
 !4::SendText("#")
 
