@@ -104,6 +104,9 @@ ReadSerial() {
 
 ; --- MACRO MAPPINGS ---
 DispatchMacro(cmd) {
+    global DoubleTapTaps, DoubleTapLastKey
+    if (DoubleTapLastKey != cmd)
+        DoubleTapTaps.Clear()   ; any other key cancels pending taps
     switch cmd {
         ; ═══ LAYER 1 ═════════════════════════════
         case "L1_K_01": 
@@ -139,9 +142,8 @@ DispatchMacro(cmd) {
                 ToolTip("Not a valid path: " raw)
                 SetTimer(() => ToolTip(), -2000)
             }
-        case "L1_K_12": 
-            ToolTip("Listening...")
-            Send("^#{x}")    ; send ctrl+win+x
+        case "L1_K_12":
+            DoubleTap("L1_K_12", () => Send("^#{x}"))
 
         ; ═══ LAYER 2 ═════════════════════════════
         case "L2_K_01": ToolTip("L2__B_01")
@@ -160,6 +162,27 @@ DispatchMacro(cmd) {
     
     ; Clear the tooltip automatically after 1 second
     SetTimer(() => ToolTip(), -1000) 
+}
+
+; ── Double-tap state ──
+; Pending taps per key (keyName → last press tick) + last key that engaged DoubleTap.
+DoubleTapTaps   := Map()
+DoubleTapLastKey := ""
+
+; Fire `action` only when `keyName` is pressed twice within `window` ms.
+; A different key pressed in between cancels the pending tap (anti-misfire).
+DoubleTap(keyName, action, window := 400) {
+    global DoubleTapTaps, DoubleTapLastKey
+    if (DoubleTapLastKey != keyName) {
+        DoubleTapTaps.Clear()
+        DoubleTapLastKey := keyName
+    }
+    if DoubleTapTaps.Has(keyName) && (A_TickCount - DoubleTapTaps[keyName]) <= window {
+        DoubleTapTaps.Delete(keyName)
+        action()
+        return
+    }
+    DoubleTapTaps[keyName] := A_TickCount
 }
 
 ; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
