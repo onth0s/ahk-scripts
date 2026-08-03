@@ -122,7 +122,7 @@ DispatchMacro(cmd) {
         ; KEY 10 is reserved for hardware layer switching
         case "L1_K_11": ToolTip("L1__B_11")
         case "L1_K_12": 
-            ToolTip("L1__B_12")
+            ToolTip("Listening...")
             Send("^#{x}")    ; send ctrl+win+x
 
         ; ═══ LAYER 2 ═════════════════════════════
