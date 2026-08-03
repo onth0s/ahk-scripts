@@ -104,24 +104,38 @@ ReadSerial() {
 
 ; --- MACRO MAPPINGS ---
 DispatchMacro(cmd) {
-    ; MsgBox halts the script! Using ToolTip instead allows rapid-fire button testing
     switch cmd {
-        case "KEY_1":  ToolTip("ButtonGrid 01")
-        case "KEY_2":  ToolTip("ButtonGrid 02")
-        case "KEY_3":  ToolTip("ButtonGrid 03")
-        case "KEY_4":  ToolTip("ButtonGrid 04")
-        case "KEY_5":  ToolTip("ButtonGrid 05")
-        case "KEY_6":  ToolTip("ButtonGrid 06")
-        case "KEY_7":  ToolTip("ButtonGrid 07")
-        case "KEY_8":  ToolTip("ButtonGrid 08")
-        case "KEY_9":  ToolTip("ButtonGrid 09")
-        case "KEY_10": ToolTip("ButtonGrid 10")
-        case "KEY_11": ToolTip("ButtonGrid 11")
-        case "KEY_12": ToolTip("ButtonGrid 12")
+        ; ═══ LAYER 1 ═════════════════════════════
+        case "L1_K_01": ToolTip("L1__B_01")
+        case "L1_K_02": ToolTip("L1__B_02")
+        case "L1_K_03": ToolTip("L1__B_03")
+        case "L1_K_04": ToolTip("L1__B_04")
+        case "L1_K_05": ToolTip("L1__B_05")
+        case "L1_K_06": ToolTip("L1__B_06")
+        case "L1_K_07": ToolTip("L1__B_07")
+        case "L1_K_08": ToolTip("L1__B_08")
+        case "L1_K_09": ToolTip("L1__B_09")
+        ; KEY 10 is reserved for hardware layer switching
+        case "L1_K_11": ToolTip("L1__B_11")
+        case "L1_K_12": ToolTip("L1__B_12")
+
+        ; ═══ LAYER 2 ═════════════════════════════
+        case "L2_K_01": ToolTip("L2__B_01")
+        case "L2_K_02": ToolTip("L2__B_02")
+        case "L2_K_03": ToolTip("L2__B_03")
+        case "L2_K_04": ToolTip("L2__B_04")
+        case "L2_K_05": ToolTip("L2__B_05")
+        case "L2_K_06": ToolTip("L2__B_06")
+        case "L2_K_07": ToolTip("L2__B_07")
+        case "L2_K_08": ToolTip("L2__B_08")
+        case "L2_K_09": ToolTip("L2__B_09")
+        ; KEY 10 is reserved for hardware layer switching
+        case "L2_K_11": ToolTip("L2__B_11")
+        case "L2_K_12": ToolTip("L2__B_12")
     }
     
     ; Clear the tooltip automatically after 1 second
-    SetTimer(() => ToolTip(), -1000) 
+    SetTimer(() => ToolTip(), -750) 
 }
 
 ; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
