@@ -120,7 +120,25 @@ DispatchMacro(cmd) {
         case "L1_K_08": ToolTip("L1__B_08")
         case "L1_K_09": ToolTip("L1__B_09")
         ; KEY 10 is reserved for hardware layer switching
-        case "L1_K_11": ToolTip("L1__B_11")
+        ; L1_K_11: open opencode in Windows Terminal at the clipboard path
+        case "L1_K_11":
+            raw := Trim(A_Clipboard, " `t`r`n")
+            raw := RegExReplace(raw, '^"|"$')        ; strip Copy-as-path quotes
+            if RegExMatch(raw, '^file:///')
+                raw := StrReplace(SubStr(raw, 8), "/", "\")
+
+            if !raw {
+                ToolTip("Clipboard is empty — copy a path first")
+                SetTimer(() => ToolTip(), -2000)
+            } else if DirExist(raw) {
+                LaunchOpencode(raw)
+            } else if FileExist(raw) {
+                SplitPath(raw, , &dir)               ; file path → its folder
+                LaunchOpencode(dir)
+            } else {
+                ToolTip("Not a valid path: " raw)
+                SetTimer(() => ToolTip(), -2000)
+            }
         case "L1_K_12": 
             ToolTip("Listening...")
             Send("^#{x}")    ; send ctrl+win+x
@@ -318,13 +336,56 @@ $^Numpad1::Send("4")
 
 ; Win+F1: Resize Windows Terminal to 75% × 85% of screen, offset from top-left
 #HotIf WinActive("ahk_class CASCADIA_HOSTING_WINDOW_CLASS")
-#F1:: {
-    activeHWnd := WinExist("A")
-    targetWidth  := A_ScreenWidth * TERMINAL_WIDTH_PCT
-    targetHeight := A_ScreenHeight * TERMINAL_HEIGHT_PCT
-    WinMove(TERMINAL_OFFSET_X, TERMINAL_OFFSET_Y, targetWidth, targetHeight, activeHWnd)
-}
+#F1:: ResizeTerminal()
 #HotIf  ; ── end context ──
+
+; Apply the standard Win+F1 size to a Windows Terminal window (default: active)
+ResizeTerminal(hwnd := 0) {
+    if !hwnd
+        hwnd := WinExist("A")
+    if !hwnd
+        return
+    WinMove(TERMINAL_OFFSET_X, TERMINAL_OFFSET_Y,
+        A_ScreenWidth * TERMINAL_WIDTH_PCT, A_ScreenHeight * TERMINAL_HEIGHT_PCT, "ahk_id " hwnd)
+}
+
+; Run a program at user (non-elevated) integrity level via the desktop shell.
+; Source: AutoHotkeyUX/inc/ShellRun.ahk (Lexikos), AHK v2 port.
+ShellRun(filePath, arguments?, directory?, operation?, show?) {
+    static VT_UI4 := 0x13, SWC_DESKTOP := ComValue(VT_UI4, 0x8)
+    ComObject("Shell.Application").Windows.Item(SWC_DESKTOP).Document.Application
+        .ShellExecute(filePath, arguments?, directory?, operation?, show?)
+}
+
+; Launch opencode in Windows Terminal at the given directory, then size the
+; terminal window to the same dimensions Win+F1 uses.
+; wt.exe is launched de-elevated so it can attach to existing (non-elevated)
+; terminals as a new tab, or spawn a fresh window when none are running.
+LaunchOpencode(dir) {
+    wtPath := EnvGet("LOCALAPPDATA") . "\Microsoft\WindowsApps\wt.exe"
+    before := WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS")
+
+    ShellRun(wtPath, '-d "' dir '" pwsh.exe -NoExit -Command "opencode"')
+
+    if WinWait("ahk_class CASCADIA_HOSTING_WINDOW_CLASS", , 5) {
+        Sleep(400)
+        target := 0
+        for w in WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS") {
+            if !before.HasValue(w) {
+                target := w          ; a brand-new window was created
+                break
+            }
+        }
+        if !target && before.Length > 0
+            target := before[1]      ; tab landed in existing topmost window
+
+        if target {
+            WinActivate("ahk_id " target)
+            WinWaitActive("ahk_id " target, , 3)
+            ResizeTerminal(target)
+        }
+    }
+}
 
 ; Win+F1: Snap Task Manager to right 58% of Monitor 1
 #HotIf WinActive("ahk_class TaskManagerWindow")

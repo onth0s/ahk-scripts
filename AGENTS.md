@@ -38,6 +38,20 @@ are implicitly global. Explicit `global` keyword is optional but harmless there.
 Hotkey handlers and functions can read these variables without re-declaring them as
 `global` inside the handler body.
 
+### `Clipboard` Does Not Exist in AHK v2 — Use `A_Clipboard`
+
+**Symptom:** `Error: This local/global variable has not been assigned a value. Specifically: Clipboard`
+
+**Cause:** v1's `Clipboard` was renamed in v2 to `A_Clipboard`. Referencing `Clipboard`
+(and other v1-only names like `A_LocalAppData`) throws an unset error — `#Warn VarUnset, Off`
+does NOT help, and a `global Clipboard` declaration just promotes the empty variable.
+
+**Fix:** Use the v2 built-in `A_Clipboard`:
+
+```ahk
+raw := Trim(A_Clipboard, " `t`r`n")   ; A_* built-ins work inside functions — no `global` needed
+```
+
 ### AHK Version
 
 This project requires **AutoHotkey v2.0** (`#Requires AutoHotkey v2.0`).
