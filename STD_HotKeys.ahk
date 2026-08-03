@@ -123,7 +123,7 @@ DispatchMacro(cmd) {
         case "L1_K_11": ToolTip("L1__B_11")
         case "L1_K_12": 
             ToolTip("L1__B_12")
-            ; send ctrl+win+x
+            Send("^#{x}")    ; send ctrl+win+x
 
         ; ═══ LAYER 2 ═════════════════════════════
         case "L2_K_01": ToolTip("L2__B_01")
