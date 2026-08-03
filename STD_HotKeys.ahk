@@ -106,7 +106,9 @@ ReadSerial() {
 DispatchMacro(cmd) {
     switch cmd {
         ; ═══ LAYER 1 ═════════════════════════════
-        case "L1_K_01": ToolTip("L1__B_01")
+        case "L1_K_01": 
+            ToolTip("Launching Sublime Text...")
+            Run('"C:\Program Files\Sublime Text\sublime.exe"')
         case "L1_K_02": ToolTip("L1__B_02")
         case "L1_K_03":
             ToolTip("Launching Krita...")
@@ -119,7 +121,9 @@ DispatchMacro(cmd) {
         case "L1_K_09": ToolTip("L1__B_09")
         ; KEY 10 is reserved for hardware layer switching
         case "L1_K_11": ToolTip("L1__B_11")
-        case "L1_K_12": ToolTip("L1__B_12")
+        case "L1_K_12": 
+            ToolTip("L1__B_12")
+            ; send ctrl+win+x
 
         ; ═══ LAYER 2 ═════════════════════════════
         case "L2_K_01": ToolTip("L2__B_01")
