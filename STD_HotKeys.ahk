@@ -371,7 +371,14 @@ LaunchOpencode(dir) {
         Sleep(400)
         target := 0
         for w in WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS") {
-            if !before.HasValue(w) {
+            wasOpen := false
+            for b in before {
+                if b = w {
+                    wasOpen := true
+                    break
+                }
+            }
+            if !wasOpen {
                 target := w          ; a brand-new window was created
                 break
             }
