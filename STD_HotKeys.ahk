@@ -6,7 +6,6 @@
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-Persistent()
 #Warn VarUnset, Off  ; Suppress false positive on built-in A_* variables
 SetTitleMatchMode 2  ; Partial matching for window title criteria
 
@@ -21,6 +20,10 @@ Persistent() ; <--- CRITICAL FIX: Forces script to stay alive in the background
 
 ComPort := "COM5"   ; Your Nano's COM port
 BaudRate := 9600
+
+; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
+; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
+; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
 
 ; --- NATIVE WINDOWS SERIAL CONNECTION ---
 hCom := DllCall("CreateFile"
@@ -120,7 +123,11 @@ DispatchMacro(cmd) {
     ; Clear the tooltip automatically after 1 second
     SetTimer(() => ToolTip(), -1000) 
 }
-                    
+
+; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
+; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
+; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
+
 ; ═══ CONFIGURATION ════════════════════════════════════════════════════════════
 ; Tunable values — edit these to adjust behavior without touching logic.
 
