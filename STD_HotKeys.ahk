@@ -108,7 +108,9 @@ DispatchMacro(cmd) {
         ; ═══ LAYER 1 ═════════════════════════════
         case "L1_K_01": ToolTip("L1__B_01")
         case "L1_K_02": ToolTip("L1__B_02")
-        case "L1_K_03": ToolTip("L1__B_03")
+        case "L1_K_03":
+            ToolTip("Launching Krita...")
+            Run('"C:\Program Files\Krita (x64)\bin\krita.exe"')
         case "L1_K_04": ToolTip("L1__B_04")
         case "L1_K_05": ToolTip("L1__B_05")
         case "L1_K_06": ToolTip("L1__B_06")
@@ -135,7 +137,7 @@ DispatchMacro(cmd) {
     }
     
     ; Clear the tooltip automatically after 1 second
-    SetTimer(() => ToolTip(), -750) 
+    SetTimer(() => ToolTip(), -1000) 
 }
 
 ; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
