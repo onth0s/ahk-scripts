@@ -200,7 +200,7 @@ OPACITY_LOW  := 65
 TERMINAL_SETTINGS_PATH := EnvGet("LOCALAPPDATA") . "\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 
 ; Win+F1: Resize Windows Terminal
-TERMINAL_WIDTH_PCT  := 0.75
+TERMINAL_WIDTH_PCT  := 0.74
 TERMINAL_HEIGHT_PCT := 0.85
 TERMINAL_OFFSET_X   := 25
 TERMINAL_OFFSET_Y   := 32
@@ -369,7 +369,7 @@ ResizeTerminal(hwnd := 0) {
     if !hwnd
         return
     WinMove(TERMINAL_OFFSET_X, TERMINAL_OFFSET_Y,
-        A_ScreenWidth * TERMINAL_WIDTH_PCT, A_ScreenHeight * TERMINAL_HEIGHT_PCT, "ahk_id " hwnd)
+        A_ScreenWidth * TERMINAL_WIDTH_PCT - 3, A_ScreenHeight * TERMINAL_HEIGHT_PCT + 2, "ahk_id " hwnd)
 }
 
 ; Run a program at user (non-elevated) integrity level via the desktop shell.
