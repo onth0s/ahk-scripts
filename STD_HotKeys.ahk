@@ -129,6 +129,7 @@ DispatchMacro(cmd) {
             raw := RegExReplace(raw, '^"|"$')        ; strip Copy-as-path quotes
             if RegExMatch(raw, '^file:///')
                 raw := StrReplace(SubStr(raw, 8), "/", "\")
+            raw := ExpandTilde(raw)
 
             if !raw {
                 ToolTip("Clipboard is empty — copy a path first")
@@ -381,6 +382,16 @@ ShellRun(filePath, arguments?, directory?, operation?, show?) {
     static VT_UI4 := 0x13, SWC_DESKTOP := ComValue(VT_UI4, 0x8)
     ComObject("Shell.Application").Windows.Item(SWC_DESKTOP).Document.Application
         .ShellExecute(filePath, arguments?, directory?, operation?, show?)
+}
+
+; Expand a leading "~" (pwsh-style home) to the user profile directory.
+; Accepts "~/path", "~\" or bare "~". Other input is returned unchanged.
+ExpandTilde(path) {
+    if path = "~"
+        return EnvGet("USERPROFILE")
+    if RegExMatch(path, '^~[\\/]')
+        return EnvGet("USERPROFILE") . SubStr(path, 2)
+    return path
 }
 
 ; Launch opencode in Windows Terminal at the given directory, then size the
