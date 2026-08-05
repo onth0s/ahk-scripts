@@ -166,3 +166,4 @@ Run('pwsh.exe -NoLogo -Command ". $PROFILE; upkey"')
 **Note:** `upkey` = kill all `AutoHotkey*` processes, then restart `STD_HotKeys.ahk`.
 Use this to reload the script — do NOT roll your own reload mechanism or spawn an
 ad-hoc AHK script (it gets killed by `upkey` anyway).
+
