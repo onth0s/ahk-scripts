@@ -81,7 +81,7 @@ ReadBuffer := ""
 SetTimer ReadSerial, 30
 
 ReadSerial() {
-    global hCom, ReadBuffer
+    global hCom, ReadBuffer, SessionLocked
     buf := Buffer(64, 0)
     bytesRead := 0
     
@@ -96,7 +96,8 @@ ReadSerial() {
             ReadBuffer := SubStr(ReadBuffer, pos + 1)
             
             if (line != "") {
-                DispatchMacro(line)
+                if !SessionLocked
+                    DispatchMacro(line)
             }
         }
     }
@@ -165,6 +166,34 @@ DispatchMacro(cmd) {
     SetTimer(() => ToolTip(), -1000) 
 }
 
+; True when the workstation is locked (Win+L / secure desktop).
+; Event-driven: Windows raises WM_WTSSESSION_CHANGE (0x2B1) on lock/unlock.
+; Polling WTSConnectState is unreliable (often stays WTSActive on Win+L).
+SessionLocked := false
+
+RegisterSessionMonitor() {
+    global SessionLocked
+    if !DllCall("wtsapi32.dll\WTSRegisterSessionNotificationEx"
+        , "Ptr", 0, "Ptr", A_ScriptHwnd, "UInt", 1)   ; NOTIFY_FOR_ALL_SESSIONS
+        return false
+    OnMessage(0x02B1, WM_WTSSESSION_CHANGE)
+    ; Sync in case the script started while already locked: foreground is
+    ; LockApp.exe during the lock curtain; no active window on secure logon.
+    SessionLocked := !WinExist("A") || (WinGetProcessName("A") = "LockApp.exe")
+    return true
+}
+
+WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
+    global SessionLocked
+    if (wParam = 0x7)        ; WTS_SESSION_LOCK
+        SessionLocked := true
+    else if (wParam = 0x8)   ; WTS_SESSION_UNLOCK
+        SessionLocked := false
+}
+
+if !RegisterSessionMonitor()
+    ToolTip("Session monitor failed to register")
+
 ; ── Double-tap state ──
 ; Pending taps per key (keyName → last press tick) + last key that engaged DoubleTap.
 DoubleTapTaps   := Map()
@@ -221,11 +250,11 @@ DIMMER_Y := 709
 
 ; ═══ SYSTEM SHORTCUTS ═════════════════════════════════════════════════════════
 
-; Ctrl+Alt+Win+ñ — Reload the script
+; Ctrl+Alt+Win+ñ — Reload the script via the upkey shell command
 ^#!ñ::
 {
     MsgBox("Script reloaded!", "Success", "Iconi T1")
-    Reload()
+    Run('pwsh.exe -NoLogo -Command ". $PROFILE; upkey"')
 }
 
 ; Ctrl+Alt+Win+p — Open this script in the default editor

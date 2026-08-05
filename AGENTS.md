@@ -60,3 +60,109 @@ Always write AHK v2 syntax:
 - `EnvGet` is an exception — it returns the value directly, no `&`
 - `try/catch as err` syntax (not `catch e`)
 - Block syntax with `{ }` for hotkey/hotstring handlers
+
+### Detecting a Locked Workstation (Win+L) — Use WM_WTSSESSION_CHANGE, NOT WTSConnectState
+
+**Symptom:** Script keeps firing while the PC is locked; `query session` shows the console
+session flip `Active → Disc` on lock, but polling `WTSConnectState` via
+`WTSQuerySessionInformation` still reports `WTSActive`.
+
+**Cause:** `WTSConnectState` does NOT reliably flip on Win+L (known community issue).
+Even though the docs claim `WTSDisconnected` occurs on lock, in practice it often stays
+`WTSActive`. Do NOT poll it for lock state.
+
+**Fix:** Event-driven `WM_WTSSESSION_CHANGE` (0x02B1) via `WTSRegisterSessionNotificationEx`
++ `OnMessage`. Windows sends `WTS_SESSION_LOCK` (0x7) / `WTS_SESSION_UNLOCK` (0x8) on
+transition. Keep a global flag and check it from the serial/gate code:
+
+```ahk
+SessionLocked := false
+
+RegisterSessionMonitor() {
+    global SessionLocked
+    if !DllCall("wtsapi32.dll\WTSRegisterSessionNotificationEx"
+        , "Ptr", 0, "Ptr", A_ScriptHwnd, "UInt", 1)   ; NOTIFY_FOR_ALL_SESSIONS
+        return false
+    OnMessage(0x02B1, WM_WTSSESSION_CHANGE)
+    ; Sync in case the script started while already locked: foreground is
+    ; LockApp.exe during the lock curtain; no active window on secure logon.
+    SessionLocked := !WinExist("A") || (WinGetProcessName("A") = "LockApp.exe")
+    return true
+}
+
+WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {   ; 4-param signature is REQUIRED
+    global SessionLocked
+    if (wParam = 0x7)        ; WTS_SESSION_LOCK
+        SessionLocked := true
+    else if (wParam = 0x8)   ; WTS_SESSION_UNLOCK
+        SessionLocked := false
+}
+```
+
+The `WM_WTSSESSION_CHANGE` callback signature MUST be the full 4-param form
+`(wParam, lParam, msg, hwnd)`.
+
+### OnMessage Callbacks in this AutoHotkeyUX Fork — Object + Full Signature Required
+
+**Symptom 1:** `Error: Parameter #2 of OnMessage requires an Object, but received a String.`
+when passing a quoted function name: `OnMessage(0x02B1, "WM_WTSSESSION_CHANGE")`.
+
+**Cause:** This fork's `OnMessage` does NOT accept a string function name — it strictly
+requires a function object.
+
+**Symptom 2:** `Error: Invalid callback function.` when passing a bare name with a
+shortened signature: `WM_WTSSESSION_CHANGE(wParam, lParam)`.
+
+**Cause:** The callback signature is validated. It must use the full 4-param form.
+
+**Fix:**
+```ahk
+; Bare function name (NOT quoted) — this fork resolves bare names to function objects,
+; exactly like SetTimer ReadSerial, 30 does.
+OnMessage(0x02B1, WM_WTSSESSION_CHANGE)
+
+; Callback must declare all 4 parameters.
+WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) { ... }
+```
+
+### DllCall `&outputVar` Params — Pre-initialize the Variables
+
+**Symptom:** `Error: This local variable has not been assigned a value. Specifically: pp`
+thrown at the `DllCall` line itself, even though `&pp` looks like an output-only param.
+
+**Cause:** `#Warn VarUnset, Off` does not cover this. DllCall by-ref output variables
+must be assigned before the call in this fork.
+
+**Fix:**
+```ahk
+pp := 0, bytes := 0
+if !DllCall("wtsapi32.dll\WTSQuerySessionInformationW"
+    , "Ptr", 0, "UInt", 0xFFFFFFFF, "UInt", 8, "Ptr*", &pp, "UInt*", &bytes)
+    return false
+```
+
+### WTSQuerySessionInformation Info-Class Reference
+
+- `WTSConnectState` is info class **8** (NOT 6). Class **6** is `WTSWinStationName`
+  (returns a 16-byte name like "console" — misleading junk when read as a DWORD).
+- Only use this API if you genuinely need connection state; for lock detection use the
+  `WM_WTSSESSION_CHANGE` approach above.
+- `WTS_CURRENT_SERVER_HANDLE` = `0`; `WTS_CURRENT_SESSION` = `0xFFFFFFFF`.
+
+### PowerShell Profile Functions Are NOT Available in Fresh Shells
+
+**Symptom:** `upkey` (a PowerShell function defined in the user profile) fails with
+`The term 'upkey' is not recognized...` when invoked from a fresh pwsh session
+(e.g. via AHK `Run()` or a non-interactive shell).
+
+**Cause:** Aliases/functions live in the user's `$PROFILE`, which is only loaded in
+interactive sessions, and `Run()` spawns a fresh process without it.
+
+**Fix:** Load the profile explicitly before calling:
+```ahk
+Run('pwsh.exe -NoLogo -Command ". $PROFILE; upkey"')
+```
+
+**Note:** `upkey` = kill all `AutoHotkey*` processes, then restart `STD_HotKeys.ahk`.
+Use this to reload the script — do NOT roll your own reload mechanism or spawn an
+ad-hoc AHK script (it gets killed by `upkey` anyway).
