@@ -61,6 +61,37 @@ Always write AHK v2 syntax:
 - `try/catch as err` syntax (not `catch e`)
 - Block syntax with `{ }` for hotkey/hotstring handlers
 
+### Elevated Scripts Launch Elevated Children — Use `ShellRun` for GUI Apps
+
+**Symptom:** GUI apps launched with `Run()` (Krita, BeeRef, Sublime, etc.) are elevated
+and can't receive drag-and-drop from Explorer (and get blocked by UIPI for other
+interactions). Dragging a file into the window does nothing / shows a `∅` cursor.
+
+**Cause:** This script relaunches itself with admin (`Run('*RunAs "' A_ScriptFullPath '"')`
+at the top), so every child spawned via `Run()` inherits the elevated token.
+
+**Fix:** Launch interactive GUI apps through `ShellRun()` (the Lexikos ShellRun method) —
+it executes via the non-elevated desktop shell COM object, so the child runs at normal
+integrity. Arguments go in the second parameter (NOT embedded in the path string):
+
+```ahk
+# WRONG — child is elevated, no drag-and-drop:
+Run('"C:\Program Files\Krita (x64)\bin\krita.exe"')
+Run('"C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe" --paste')
+
+# CORRECT — de-elevated via the desktop shell:
+ShellRun('C:\Program Files\Krita (x64)\bin\krita.exe')
+ShellRun('C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe', '--paste')
+```
+
+Notes:
+- Pass the path WITHOUT surrounding quotes — it is a single `filePath` parameter, not a
+  command line; ShellExecute handles spaces itself. Only quote args that need quoting.
+- `wt.exe` (Windows Terminal) MUST be launched via `ShellRun` too — an elevated `wt.exe`
+  cannot attach to existing non-elevated terminal windows as a new tab.
+- `WinWait`/`WinActivate` on the child still works after `ShellRun` (e.g. BeeRef's GUI is
+  the child `pythonw.exe`, launched from the now non-elevated `beeref.exe` launcher).
+
 ### Detecting a Locked Workstation (Win+L) — Use WM_WTSSESSION_CHANGE, NOT WTSConnectState
 
 **Symptom:** Script keeps firing while the PC is locked; `query session` shows the console

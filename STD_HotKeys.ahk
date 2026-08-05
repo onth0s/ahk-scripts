@@ -120,7 +120,7 @@ DispatchMacro(cmd) {
                 DoubleTap("L1_K_03", () => LaunchBeeRefAndPasteImage())
             } else {
                 ToolTip("Launching Krita...")
-                Run('"C:\Program Files\Krita (x64)\bin\krita.exe"')
+                ShellRun('C:\Program Files\Krita (x64)\bin\krita.exe')
             }
         case "L1_K_04": ToolTip("L1__B_04")
         case "L1_K_05": ToolTip("L1__B_05")
@@ -224,7 +224,7 @@ DoubleTap(keyName, action, window := 400) {
 ; The GUI window belongs to the child pythonw.exe process (pip distlib
 ; launcher spawns it and waits), so match that, NOT beeref.exe.
 LaunchBeeRefAndPasteImage() {
-    Run('"C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe" --paste')
+    ShellRun('C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe', '--paste')
     if WinWait("ahk_exe pythonw.exe", , 5)
         WinActivate("ahk_exe pythonw.exe")
 }
