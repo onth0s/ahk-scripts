@@ -124,7 +124,9 @@ DispatchMacro(cmd) {
             }
         case "L1_K_04": ToolTip("L1__B_04")
         case "L1_K_05": ToolTip("L1__B_05")
-        case "L1_K_06": ToolTip("L1__B_06")
+        case "L1_K_06":
+            ToolTip("Launching Telegram...")
+            ShellRun('C:\Users\Leonardo\AppData\Roaming\Telegram Desktop\Telegram.exe')
         case "L1_K_07": ToolTip("L1__B_07")
         case "L1_K_08": ToolTip("L1__B_08")
         case "L1_K_09": ToolTip("L1__B_09")
