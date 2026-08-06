@@ -277,6 +277,12 @@ DIMMER_Y := 709
     Run('edit "' A_ScriptFullPath '"')
 }
 
+; Win+E — Open Downloads in File Explorer
+#e::
+{
+    Run 'explorer.exe "C:\Users\Leonardo\Downloads"'
+}
+
 ; Ctrl+Win+T — Launch Windows Terminal
 ^#t:: {
     Run("shell:AppsFolder\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App")
