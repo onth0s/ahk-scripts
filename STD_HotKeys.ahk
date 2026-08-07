@@ -112,7 +112,7 @@ DispatchMacro(cmd) {
         ; ═══ LAYER 1 ═════════════════════════════
         case "L1_K_01": 
             ToolTip("Launching Sublime Text...")
-            Run('"C:\Program Files\Sublime Text\sublime.exe"')
+            ShellRun('C:\Program Files\Sublime Text\sublime.exe')
         case "L1_K_02": ToolTip("L1__B_02")
         case "L1_K_03":
             if ProcessExist("krita.exe") {
