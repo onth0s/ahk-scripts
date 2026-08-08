@@ -242,4 +242,101 @@ raw := Trim(raw, Chr(34) . "'")
 # clean load => EXIT 0, empty output; a load error => "Missing ..." message + EXIT 2
 ```
 
+## Session Gotchas (June 2026 run)
+
+### `WinActivate` / `WinRestore` THROW when the target window vanished
+
+**Symptom:** `Error: Target window not found. Specifically: ahk_id 788014` from
+inside `ForceFocus` / `LaunchAndFocus`, killing the `ReadSerial` timer with a
+dialog.
+
+**Cause:** `WinActivate`/`WinRestore` throw (they do NOT return false) when the
+handle no longer exists. Launching an app like Krita produces a transient
+splash/loader window that closes seconds later; if it dies while the multi-step
+focus escalation is waiting, the next `WinActivate` throws.
+
+**Fix:** Treat focus as best-effort. Wrap the escalation body in `try/catch`
+returning `false`, and re-pick a surviving window in the caller:
+
+```ahk
+ForceFocus(hwnd) {
+    try {
+        if !hwnd || !WinExist("ahk_id " hwnd)
+            return false
+        ; ... WinActivate / WinWaitActive escalation ...
+    } catch {
+        return false
+    }
+}
+```
+
+### `*RunAs` Self-Elevation + UAC Makes Launch State Ambiguous
+
+**Symptom:** After `Run('*RunAs "' A_ScriptFullPath '"')`, `Get-Process
+AutoHotkey*` shows NOTHING. Is the script broken, or not running?
+
+**Cause:** The non-elevated instance exits immediately after triggering the
+elevation; the elevated instance only exists after the user approves the UAC
+prompt. From a non-elevated shell (e.g. opencode's bash tool) you can't tell a
+pending prompt from a dead script, and `consent.exe` may not be visible.
+
+**Fix:** Check `A_IsAdmin`/elevation before diagnosing. For syntax checks use
+the `/ErrorStdOut` load test above (it never reaches the elevation logic cleanly
+enough to matter). For a real start, run `. $PROFILE; upkey` interactively and
+approve UAC — a hanging `consent.exe`/missing process is often just the prompt.
+
+### `CommandLineToArgvW` Eats a Trailing Backslash Before the Closing Quote
+
+**Symptom:** A `wt.exe` args string like `-d "C:\Users\Leonardo\Downloads\" ...`
+fails: the directory arg arrives as `C:\Users\Leonardo\Downloads"` and wt
+reports a bogus path.
+
+**Cause:** The backslash immediately before the closing `"` escapes it
+(`"C:\path\"` → `C:\path"`), swallowing the quote so the trailing args get
+mangled. This affects ANY double-quoted command-line argument ending in `\`
+(`wt.exe -d`, `Run` with quoted paths, etc.).
+
+**Fix:** Strip trailing separators before embedding in a quoted arg, with a
+drive-root guard so `C:\` is preserved:
+
+```ahk
+dir := RegExReplace(dir, '(?<!:)[\\/]+$')
+```
+
+Validate with the real parser (`shell32.dll\CommandLineToArgvW`) — eyeballing
+the string is not enough.
+
+### `file:///` Prefix is 8 Chars — Off-by-One
+
+**Symptom:** `file:///C:/Users/...` strips to `\C:\Users\...` (leading backslash,
+path invalid).
+
+**Cause:** `StrReplace(SubStr(raw, 8), ...)` starts at the THIRD slash. The
+`file:///` scheme+authority prefix is 8 characters, so the path begins at
+`SubStr(raw, 9)`.
+
+**Fix:**
+```ahk
+if RegExMatch(raw, '^file:///')
+    raw := StrReplace(SubStr(raw, 9), "/", "\")
+```
+
+### Verify the MERGED Output, Not Just the Splices
+
+**Symptom:** Splices edited, `merge.py` runs ("merged 8 splices"), but the
+running script still has the old behavior.
+
+**Cause:** `upkey` runs `merge.py` internally, so a prior/broken merge state can
+leave `STD_HotKeys.ahk` stale; the file is also regenerated on every reload.
+
+**Fix:** After editing, confirm the change landed in the merged file AND that it
+loads cleanly:
+
+```pwsh
+python merge.py
+Get-Content STD_HotKeys.ahk | Select-String -SimpleMatch '<your new line>'
+& "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" /ErrorStdOut "STD_HotKeys.ahk"  # EXIT 0
+```
+
+
 
