@@ -254,6 +254,9 @@ TERMINAL_OFFSET_Y   := 32
 ; Win+F1: Snap Task Manager to right side of Monitor 1
 TASKMANAGER_WIDTH_PCT := 0.58
 
+; Win+F1: Resize Microsoft Edge to 3/4 width × full height, left-aligned
+EDGE_WIDTH_PCT := 0.75
+
 ; Win+F1: Reposition Settings app
 SETTINGS_X := 0
 SETTINGS_Y := 7
@@ -507,6 +510,76 @@ LaunchOpencode(dir) {
     }
 }
 #HotIf  ; ── end context ──
+
+; Win+F1: Resize Microsoft Edge to 3/4 width × full height, left-aligned.
+; Win11 wraps resizable windows in invisible resize borders that WinMove/GetWindowRect
+; coordinates include, so the visible frame never lands flush with the work area.
+; VisibleFrameInset() measures the gap (DWM extended frame bounds) so we nudge the
+; window and the VISIBLE frame lands exactly on the target rect.
+#HotIf WinActive("ahk_exe msedge.exe")
+#F1:: {
+    activeHwnd := WinExist("A")
+    if !activeHwnd
+        return
+
+    try {
+        if !MonitorWorkArea(activeHwnd, &left, &top, &right, &bottom) {
+            ToolTip("Failed to detect monitor.")
+            SetTimer(() => ToolTip(), -2000)
+            return
+        }
+        dl := 0, dt := 0, dr := 0, db := 0
+        VisibleFrameInset(activeHwnd, &dl, &dt, &dr, &db)
+
+        width  := (right - left) * EDGE_WIDTH_PCT
+        height := bottom - top
+        WinMove(left - dl, top - dt, width + dl + dr, height + dt + db, activeHwnd)
+    }
+}
+#HotIf  ; ── end context ──
+
+; Measure how far a window's VISIBLE frame (DWM extended frame bounds) sits inside
+; its outer window rect. On Win10/11, GetWindowRect and WinMove include the
+; invisible resize borders (~7px), so target coordinates must be nudged by these
+; deltas to make the visible frame land flush with an edge.
+VisibleFrameInset(hwnd, &dl, &dt, &dr, &db) {
+    rect := Buffer(16)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", rect)
+    wl := NumGet(rect, 0, "Int"), wt := NumGet(rect, 4, "Int")
+    wr := NumGet(rect, 8, "Int"), wb := NumGet(rect, 12, "Int")
+
+    efb := Buffer(16)                      ; DWMWA_EXTENDED_FRAME_BOUNDS = 9
+    if DllCall("dwmapi.dll\DwmGetWindowAttribute", "Ptr", hwnd, "UInt", 9, "Ptr", efb, "UInt", 16)
+        return false
+    el := NumGet(efb, 0, "Int"), et := NumGet(efb, 4, "Int")
+    er := NumGet(efb, 8, "Int"), eb := NumGet(efb, 12, "Int")
+
+    dl := el - wl                          ; content inset from outer window rect
+    dt := et - wt
+    dr := wr - er
+    db := wb - eb
+    return true
+}
+
+; Get the work area of the monitor containing `hwnd` (nearest if off-screen).
+; AHK v2 has no built-in window→monitor helper; MonitorGetWorkArea only takes a
+; monitor number, so resolve the monitor via MonitorFromWindow + GetMonitorInfo.
+MonitorWorkArea(hwnd, &left, &top, &right, &bottom) {
+    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
+    if !hMon
+        return false
+
+    mi := Buffer(40)                           ; MONITORINFO
+    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
+    if !DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
+        return false
+
+    left   := NumGet(mi, 20, "Int")            ; rcWork.left
+    top    := NumGet(mi, 24, "Int")            ; rcWork.top
+    right  := NumGet(mi, 28, "Int")            ; rcWork.right
+    bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
+    return true
+}
 
 ; ═══ DEBUG TOOLS ══════════════════════════════════════════════════════════════
 
