@@ -194,7 +194,52 @@ interactive sessions, and `Run()` spawns a fresh process without it.
 Run('pwsh.exe -NoLogo -Command ". $PROFILE; upkey"')
 ```
 
-**Note:** `upkey` = kill all `AutoHotkey*` processes, then restart `STD_HotKeys.ahk`.
-Use this to reload the script — do NOT roll your own reload mechanism or spawn an
-ad-hoc AHK script (it gets killed by `upkey` anyway).
+**Note:** `upkey` = kill all `AutoHotkey*` processes, merge the `src/*.ahk` splices
+via `merge.py` into `STD_HotKeys.ahk`, then restart it. `STD_HotKeys.ahk` is a
+GENERATED file — never edit it directly (changes get overwritten on next `upkey`).
+Edit the splices in `src/` instead. Use `upkey` to reload — do NOT roll your own
+reload mechanism or spawn an ad-hoc AHK script (it gets killed by `upkey` anyway).
+
+### AutoHotkeyUX Fork: `""` (Double-Quote Escape) is BROKEN — Use Backtick-Quote
+
+**Symptom:** A script that loads fine in stock AutoHotkey v2 fails here with a
+parse error at a string that uses the standard `""` escape:
+- `Error: Missing "'"` — `raw := Trim(raw, """'")`
+- `Error: Missing space or operator before this. Specifically: "'")`
+- `Error: Missing "'"` — `raw := Trim(raw, """ "'")`
+The script exits before ANY line runs (even `FileAppend` on line 1), and a
+process may hang on an error dialog. `try/catch` does NOT help — it's a load-time
+parse error, not a runtime error.
+
+**Cause:** This fork (AutoHotkeyUX) does NOT implement `""` as an escaped
+double-quote inside double-quoted strings (stock v2 behavior). It treats `""`
+as the empty-string token, so any `"a""b"`-style construct fails to parse.
+Empirically verified in this build:
+- `q := """"` → **FAIL**
+- `q := "a""b"` → **FAIL**
+- `q := "a`"b"` → **OK** (`\`` + `"` = literal quote)
+- `q := 'a"b'` → **OK** (double quotes are fine inside single-quoted strings)
+- `q := Chr(34) . Chr(39)` → **OK** (`"` + `'`)
+
+**Fix:** Use backtick-quote (`` `" ``) or `Chr(34)` instead of `""`:
+
+```ahk
+# WRONG — parse error in this fork:
+raw := Trim(raw, """'")
+
+# CORRECT — backtick-quote escape:
+raw := Trim(raw, "`"'")          ; charset = `"` and `'`
+
+# CORRECT — Chr() concat, zero escaping:
+raw := Trim(raw, Chr(34) . "'")
+```
+
+**Verify before trusting any string edit:** after editing a splice, rebuild with
+`python merge.py` and check the merged script loads with NO error:
+
+```pwsh
+& "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" /ErrorStdOut "STD_HotKeys.ahk"
+# clean load => EXIT 0, empty output; a load error => "Missing ..." message + EXIT 2
+```
+
 

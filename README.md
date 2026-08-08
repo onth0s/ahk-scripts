@@ -21,11 +21,17 @@ launched de-elevated via `ShellRun` to keep normal drag-and-drop / window behavi
 
 ## Reloading
 
-The script auto-kills and restarts itself via the `upkey` PowerShell profile
-function (kill all `AutoHotkey*` processes, then restart `STD_HotKeys.ahk`):
+The script auto-kills, rebuilds, and restarts itself via the `upkey` PowerShell
+profile function (kill all `AutoHotkey*` processes, merge the `src/*.ahk` splices
+via `merge.py` into `STD_HotKeys.ahk`, then restart it):
 
 - In-script: `Ctrl+Alt+Win+ñ`
 - From a shell: `. $PROFILE; upkey`
+
+`STD_HotKeys.ahk` is a GENERATED file — do not edit it directly. Source splices
+live in `src/` (numbered `00_header.ahk` … `70_debug.ahk`) and are concatenated
+in filename order by `python merge.py`. After editing a splice, reload with
+`upkey` to rebuild and restart. `Ctrl+Alt+Win+p` opens the `src/` folder.
 
 ## System shortcuts
 
