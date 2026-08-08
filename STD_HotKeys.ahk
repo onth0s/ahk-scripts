@@ -253,8 +253,15 @@ TERMINAL_OFFSET_Y   := 32
 ; Win+F1: Snap Task Manager to right side of Monitor 1
 TASKMANAGER_WIDTH_PCT := 0.58
 
-; Win+F1: Resize Microsoft Edge to 3/4 width × full height, left-aligned
-EDGE_WIDTH_PCT := 0.75
+; Win+F1: Resize Microsoft Edge (raw width px, height as % of work area, nudged left)
+; *_OFFSET stubs are fine-tune deltas added on top (default 0) for XY position and size.
+EDGE_WIDTH_PX       := 200
+EDGE_HEIGHT_PCT     := 0.50
+EDGE_X_OFFSET       := -5
+EDGE_POS_X_OFFSET   := 0
+EDGE_POS_Y_OFFSET   := 0
+EDGE_SIZE_W_OFFSET  := 0
+EDGE_SIZE_H_OFFSET  := 0
 
 ; Win+F1: Reposition Settings app
 SETTINGS_X := 0
@@ -601,55 +608,38 @@ LaunchOpencode(dir) {
 }
 #HotIf  ; ── end context ──
 
-; Win+F1: Resize Microsoft Edge to 3/4 width × full height, left-aligned.
-; Win11 wraps resizable windows in invisible resize borders that WinMove/GetWindowRect
-; coordinates include, so the visible frame never lands flush with the work area.
-; VisibleFrameInset() measures the gap (DWM extended frame bounds) so we nudge the
-; window and the VISIBLE frame lands exactly on the target rect.
+; Win+F1: Resize Microsoft Edge to a fraction of the work area, left-aligned.
 #HotIf WinActive("ahk_exe msedge.exe")
 #F1:: {
     activeHwnd := WinExist("A")
     if !activeHwnd
         return
 
+    ; Edge is per-monitor-DPI-aware; AHK v2 is not. On this mixed-scale setup
+    ; (left monitor 200%, primary 100%) AHK's coordinates are DPI-virtualized,
+    ; so WinMove sizes land wrong. Switch this thread to Per-Monitor v2 so all
+    ; coordinates are physical pixels, matching Edge, then restore.
+    origContext := DllCall("SetThreadDpiAwarenessContext", "Ptr", -4, "Ptr")
     try {
-        if !MonitorWorkArea(activeHwnd, &left, &top, &right, &bottom) {
+        ; A maximized window ignores WinMove, so restore it first.
+        if DllCall("IsZoomed", "Ptr", activeHwnd)
+            WinRestore("ahk_id " activeHwnd)
+
+        if MonitorWorkArea(activeHwnd, &left, &top, &right, &bottom) {
+            width  := EDGE_WIDTH_PX + EDGE_SIZE_W_OFFSET
+            height := (bottom - top) * EDGE_HEIGHT_PCT + EDGE_SIZE_H_OFFSET
+            WinMove(left + EDGE_X_OFFSET + EDGE_POS_X_OFFSET,
+                top + EDGE_POS_Y_OFFSET, width, height, activeHwnd)
+        } else {
             ToolTip("Failed to detect monitor.")
             SetTimer(() => ToolTip(), -2000)
-            return
         }
-        dl := 0, dt := 0, dr := 0, db := 0
-        VisibleFrameInset(activeHwnd, &dl, &dt, &dr, &db)
-
-        width  := (right - left) * EDGE_WIDTH_PCT
-        height := bottom - top
-        WinMove(left - dl, top - dt, width + dl + dr, height + dt + db, activeHwnd)
+    } catch {
     }
+    if origContext
+        DllCall("SetThreadDpiAwarenessContext", "Ptr", origContext, "Ptr")
 }
 #HotIf  ; ── end context ──
-
-; Measure how far a window's VISIBLE frame (DWM extended frame bounds) sits inside
-; its outer window rect. On Win10/11, GetWindowRect and WinMove include the
-; invisible resize borders (~7px), so target coordinates must be nudged by these
-; deltas to make the visible frame land flush with an edge.
-VisibleFrameInset(hwnd, &dl, &dt, &dr, &db) {
-    rect := Buffer(16)
-    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", rect)
-    wl := NumGet(rect, 0, "Int"), wt := NumGet(rect, 4, "Int")
-    wr := NumGet(rect, 8, "Int"), wb := NumGet(rect, 12, "Int")
-
-    efb := Buffer(16)                      ; DWMWA_EXTENDED_FRAME_BOUNDS = 9
-    if DllCall("dwmapi.dll\DwmGetWindowAttribute", "Ptr", hwnd, "UInt", 9, "Ptr", efb, "UInt", 16)
-        return false
-    el := NumGet(efb, 0, "Int"), et := NumGet(efb, 4, "Int")
-    er := NumGet(efb, 8, "Int"), eb := NumGet(efb, 12, "Int")
-
-    dl := el - wl                          ; content inset from outer window rect
-    dt := et - wt
-    dr := wr - er
-    db := wb - eb
-    return true
-}
 
 ; Get the work area of the monitor containing `hwnd` (nearest if off-screen).
 ; AHK v2 has no built-in window→monitor helper; MonitorGetWorkArea only takes a

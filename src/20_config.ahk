@@ -17,8 +17,15 @@ TERMINAL_OFFSET_Y   := 32
 ; Win+F1: Snap Task Manager to right side of Monitor 1
 TASKMANAGER_WIDTH_PCT := 0.58
 
-; Win+F1: Resize Microsoft Edge to 3/4 width × full height, left-aligned
-EDGE_WIDTH_PCT := 0.75
+; Win+F1: Resize Microsoft Edge (raw width px, height as % of work area, nudged left)
+; *_OFFSET stubs are fine-tune deltas added on top (default 0) for XY position and size.
+EDGE_WIDTH_PX       := 200
+EDGE_HEIGHT_PCT     := 0.50
+EDGE_X_OFFSET       := -5
+EDGE_POS_X_OFFSET   := 0
+EDGE_POS_Y_OFFSET   := 0
+EDGE_SIZE_W_OFFSET  := 0
+EDGE_SIZE_H_OFFSET  := 0
 
 ; Win+F1: Reposition Settings app
 SETTINGS_X := 0
