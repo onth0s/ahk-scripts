@@ -338,5 +338,7 @@ Get-Content STD_HotKeys.ahk | Select-String -SimpleMatch '<your new line>'
 & "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" /ErrorStdOut "STD_HotKeys.ahk"  # EXIT 0
 ```
 
+If pertinent, use `. $PROFILE; upkey` to reload the AHK script.
+
 
 

@@ -202,7 +202,7 @@ LaunchOpencode(dir) {
             targetWidth  := monitorWidth * TASKMANAGER_1080P_WIDTH_PCT
             targetHeight := monitorHeight * TASKMANAGER_1080P_HEIGHT_PCT
             targetX := right - targetWidth + TASKMANAGER_1080P_X_OFFSET
-            targetY := top
+            targetY := top + TASKMANAGER_1080P_Y_OFFSET
         } else {
             ; Other screens: keep the tuned offsets (flush right +7, top -1)
             targetX := right - targetWidth + 7

@@ -256,7 +256,8 @@ TASKMANAGER_WIDTH_PCT := 0.58
 ; 40% width, nudged 5px toward the right edge
 TASKMANAGER_1080P_HEIGHT_PCT := 0.50
 TASKMANAGER_1080P_WIDTH_PCT := 0.41
-TASKMANAGER_1080P_X_OFFSET := 7
+TASKMANAGER_1080P_X_OFFSET := 9
+TASKMANAGER_1080P_Y_OFFSET := -1
 
 ; Win+F1: Resize Microsoft Edge (raw width px, height as % of work area, nudged left)
 ; *_OFFSET stubs are fine-tune deltas added on top (default 0) for XY position and size.
@@ -609,7 +610,7 @@ LaunchOpencode(dir) {
             targetWidth  := monitorWidth * TASKMANAGER_1080P_WIDTH_PCT
             targetHeight := monitorHeight * TASKMANAGER_1080P_HEIGHT_PCT
             targetX := right - targetWidth + TASKMANAGER_1080P_X_OFFSET
-            targetY := top
+            targetY := top + TASKMANAGER_1080P_Y_OFFSET
         } else {
             ; Other screens: keep the tuned offsets (flush right +7, top -1)
             targetX := right - targetWidth + 7
