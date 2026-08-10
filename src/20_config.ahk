@@ -19,13 +19,13 @@ TASKMANAGER_WIDTH_PCT := 0.58
 
 ; Win+F1: Resize Microsoft Edge (raw width px, height as % of work area, nudged left)
 ; *_OFFSET stubs are fine-tune deltas added on top (default 0) for XY position and size.
-EDGE_WIDTH_PX       := 200
-EDGE_HEIGHT_PCT     := 0.50
-EDGE_X_OFFSET       := -5
+EDGE_WIDTH_PX       := 1400
+EDGE_HEIGHT_PCT     := 1
+EDGE_X_OFFSET       := -10
 EDGE_POS_X_OFFSET   := 0
-EDGE_POS_Y_OFFSET   := 0
+EDGE_POS_Y_OFFSET   := -2
 EDGE_SIZE_W_OFFSET  := 0
-EDGE_SIZE_H_OFFSET  := 0
+EDGE_SIZE_H_OFFSET  := 10
 
 ; Win+F1: Reposition Settings app
 SETTINGS_X := 0
