@@ -14,8 +14,13 @@ TERMINAL_HEIGHT_PCT := 0.85
 TERMINAL_OFFSET_X   := 25
 TERMINAL_OFFSET_Y   := 32
 
-; Win+F1: Snap Task Manager to right side of Monitor 1
+; Win+F1: Snap Task Manager to the right 58% of the monitor it's on
 TASKMANAGER_WIDTH_PCT := 0.58
+; On a 1920x1080 monitor: snap flush to the top-right at this fraction of height,
+; 40% width, nudged 5px toward the right edge
+TASKMANAGER_1080P_HEIGHT_PCT := 0.50
+TASKMANAGER_1080P_WIDTH_PCT := 0.41
+TASKMANAGER_1080P_X_OFFSET := 7
 
 ; Win+F1: Resize Microsoft Edge (raw width px, height as % of work area, nudged left)
 ; *_OFFSET stubs are fine-tune deltas added on top (default 0) for XY position and size.

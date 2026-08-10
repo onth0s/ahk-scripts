@@ -180,13 +180,16 @@ LaunchOpencode(dir) {
     }
 }
 
-; Win+F1: Snap Task Manager to right 58% of Monitor 1
+; Win+F1: Snap Task Manager to the right 58% of whichever monitor it's on.
+; On a 1920x1080 monitor it aligns flush to the top-right; elsewhere it keeps
+; the tuned offsets from the original Monitor 1 behavior.
 #HotIf WinActive("ahk_class TaskManagerWindow")
 #F1:: {
     activeHWnd := WinExist("A")
 
     try {
-        MonitorGetWorkArea(1, &left, &top, &right, &bottom)
+        if !MonitorWorkArea(activeHWnd, &left, &top, &right, &bottom)
+            throw
 
         monitorWidth  := right - left
         monitorHeight := bottom - top
@@ -194,13 +197,21 @@ LaunchOpencode(dir) {
         targetWidth  := monitorWidth * TASKMANAGER_WIDTH_PCT
         targetHeight := monitorHeight + 9
 
-        ; Flush against the right edge, vertically centered
-        targetX := right - targetWidth + 7
-        targetY := top - 1
+        if MonitorPhysicalSize(activeHWnd, 1920, 1080) {
+            ; 1920x1080 screen: flush top-right, 40% width, 50% height, nudged 5px toward the right
+            targetWidth  := monitorWidth * TASKMANAGER_1080P_WIDTH_PCT
+            targetHeight := monitorHeight * TASKMANAGER_1080P_HEIGHT_PCT
+            targetX := right - targetWidth + TASKMANAGER_1080P_X_OFFSET
+            targetY := top
+        } else {
+            ; Other screens: keep the tuned offsets (flush right +7, top -1)
+            targetX := right - targetWidth + 7
+            targetY := top - 1
+        }
 
         WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
     } catch {
-        ToolTip("Failed to detect Monitor 1.")
+        ToolTip("Failed to detect the Task Manager's monitor.")
         SetTimer(() => ToolTip(), -2000)
     }
 }
@@ -257,4 +268,22 @@ MonitorWorkArea(hwnd, &left, &top, &right, &bottom) {
     right  := NumGet(mi, 28, "Int")            ; rcWork.right
     bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
     return true
+}
+
+; True if the monitor containing `hwnd` has the given physical resolution
+; (rcMonitor, not rcWork — unaffected by DPI scaling / taskbar placement).
+MonitorPhysicalSize(hwnd, width, height) {
+    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
+    if !hMon
+        return false
+
+    mi := Buffer(40)                           ; MONITORINFO
+    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
+    if !DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
+        return false
+
+    ; MONITORINFO: cbSize(0) | rcMonitor l,t,r,b (4,8,12,16) | rcWork l,t,r,b (20,24,28,32)
+    monWidth  := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")    ; rcMonitor.right - rcMonitor.left
+    monHeight := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")    ; rcMonitor.bottom - rcMonitor.top
+    return (monWidth = width && monHeight = height)
 }

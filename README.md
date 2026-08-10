@@ -54,7 +54,7 @@ in filename order by `python merge.py`. After editing a splice, reload with
 - **Dimmer.exe** — bottom-left corner
 - **Windows Terminal** — 74% × 85% of the screen, offset (also used after
   `LaunchOpencode`)
-- **Task Manager** — right 58% of monitor 1
+- **Task Manager** — right 58% of the monitor it's on; on 1920×1080: top-right, 41% width, 50% height
 
 `Alt+F1` (Windows Terminal focused) toggles terminal opacity by rewriting
 `settings.json` (cycles 90% → 65% → 90%).
