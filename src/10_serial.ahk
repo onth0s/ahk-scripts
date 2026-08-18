@@ -1,84 +1,97 @@
 
 ComPort := "COM5"   ; Your Nano's COM port
 BaudRate := 9600
+SerialConnected := false
 
 ; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
 ; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
 ; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
 
 ; --- NATIVE WINDOWS SERIAL CONNECTION ---
-hCom := DllCall("CreateFile"
-    , "Str", "\\.\" . ComPort
-    , "UInt", 0xC0000000  ; GENERIC_READ | GENERIC_WRITE
-    , "UInt", 0           ; No sharing
-    , "Ptr", 0            ; Security attributes
-    , "UInt", 3           ; OPEN_EXISTING
-    , "UInt", 0           ; Flags
-    , "Ptr", 0, "Ptr")
+hCom := 0
+try {
+    hCom := DllCall("CreateFile"
+        , "Str", "\\.\" . ComPort
+        , "UInt", 0xC0000000  ; GENERIC_READ | GENERIC_WRITE
+        , "UInt", 0           ; No sharing
+        , "Ptr", 0            ; Security attributes
+        , "UInt", 3           ; OPEN_EXISTING
+        , "UInt", 0           ; Flags
+        , "Ptr", 0, "Ptr")
+} catch as err {
+    hCom := 0
+}
 
 if (hCom == -1 || hCom == 0) {
-    MsgBox("Failed to open " . ComPort . ". Ensure Arduino IDE Serial Monitor is closed.", "Error", 16)
-    ExitApp
+    ToolTip(ComPort . " not available — serial buttons disabled")
+    SetTimer(() => ToolTip(), -3000)
+    hCom := 0
+} else {
+    try {
+        ; CRITICAL FIX: Give the Arduino 2 seconds to reboot after the DTR toggle
+        Sleep(2000)
+
+        ; Build DCB safely using Windows API parser string
+        DCB := Buffer(28, 0)       ; FIX: DCB struct size is exactly 28 bytes
+        NumPut("UInt", 28, DCB, 0) ; Set DCBlength
+
+        if !DllCall("GetCommState", "Ptr", hCom, "Ptr", DCB)
+            throw Error("GetCommState failed")
+
+        ; Use BuildCommDCB to avoid manual struct bitfield offset corruption
+        if !DllCall("BuildCommDCBW", "Str", "baud=" . BaudRate . " parity=N data=8 stop=1", "Ptr", DCB)
+            throw Error("BuildCommDCB failed")
+
+        if !DllCall("SetCommState", "Ptr", hCom, "Ptr", DCB)
+            throw Error("SetCommState failed")
+
+        ; Toggle DTR & RTS lines to wake up Arduino Nano USB-Serial chip
+        SETRTS := 3, SETDTR := 5
+        DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETDTR)
+        DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETRTS)
+
+        ; Set Timeouts (non-blocking read)
+        Timeouts := Buffer(20, 0)
+        NumPut("UInt", 0xFFFFFFFF, Timeouts, 0) ; FIX: Safer UInt mapping for MAXDWORD
+        DllCall("SetCommTimeouts", "Ptr", hCom, "Ptr", Timeouts)
+
+        OnExit((*) => DllCall("CloseHandle", "Ptr", hCom))
+        SerialConnected := true
+    } catch as err {
+        ToolTip("Serial config failed (" . err.Message . ") — buttons disabled")
+        SetTimer(() => ToolTip(), -3000)
+        DllCall("CloseHandle", "Ptr", hCom)
+        hCom := 0
+    }
 }
-
-; CRITICAL FIX: Give the Arduino 2 seconds to reboot after the DTR toggle
-Sleep(2000) 
-
-; Build DCB safely using Windows API parser string
-DCB := Buffer(28, 0)       ; FIX: DCB struct size is exactly 28 bytes
-NumPut("UInt", 28, DCB, 0) ; Set DCBlength
-
-if !DllCall("GetCommState", "Ptr", hCom, "Ptr", DCB) {
-    MsgBox("Failed to get COM state.", "Error", 16)
-    ExitApp
-}
-
-; Use BuildCommDCB to avoid manual struct bitfield offset corruption
-if !DllCall("BuildCommDCBW", "Str", "baud=" . BaudRate . " parity=N data=8 stop=1", "Ptr", DCB) {
-    MsgBox("Failed to build DCB config.", "Error", 16)
-    ExitApp
-}
-
-if !DllCall("SetCommState", "Ptr", hCom, "Ptr", DCB) {
-    MsgBox("Failed to set COM state.", "Error", 16)
-    ExitApp
-}
-
-; Toggle DTR & RTS lines to wake up Arduino Nano USB-Serial chip
-SETRTS := 3, SETDTR := 5
-DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETDTR)
-DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETRTS)
-
-; Set Timeouts (non-blocking read)
-Timeouts := Buffer(20, 0)
-NumPut("UInt", 0xFFFFFFFF, Timeouts, 0) ; FIX: Safer UInt mapping for MAXDWORD
-DllCall("SetCommTimeouts", "Ptr", hCom, "Ptr", Timeouts)
-
-OnExit((*) => DllCall("CloseHandle", "Ptr", hCom))
 
 ReadBuffer := ""
 
-; Poll buffer every 30ms
-SetTimer ReadSerial, 30
+if SerialConnected
+    SetTimer ReadSerial, 30
 
 ReadSerial() {
     global hCom, ReadBuffer, SessionLocked
-    buf := Buffer(64, 0)
-    bytesRead := 0
-    
-    ; Pass buf.Ptr to Write/Read raw memory correctly
-    if DllCall("ReadFile", "Ptr", hCom, "Ptr", buf.Ptr, "UInt", 64, "UInt*", &bytesRead, "Ptr", 0) && bytesRead > 0 {
-        ReadBuffer .= StrGet(buf.Ptr, bytesRead, "UTF-8")
-        
-        ; Process complete line when newline received
-        while InStr(ReadBuffer, "`n") {
-            pos := InStr(ReadBuffer, "`n")
-            line := Trim(SubStr(ReadBuffer, 1, pos - 1), "`r`n ")
-            ReadBuffer := SubStr(ReadBuffer, pos + 1)
-            
-            if (line != "") {
-                if !SessionLocked
-                    DispatchMacro(line)
+    if !hCom
+        return
+    try {
+        buf := Buffer(64, 0)
+        bytesRead := 0
+
+        ; Pass buf.Ptr to Write/Read raw memory correctly
+        if DllCall("ReadFile", "Ptr", hCom, "Ptr", buf.Ptr, "UInt", 64, "UInt*", &bytesRead, "Ptr", 0) && bytesRead > 0 {
+            ReadBuffer .= StrGet(buf.Ptr, bytesRead, "UTF-8")
+
+            ; Process complete line when newline received
+            while InStr(ReadBuffer, "`n") {
+                pos := InStr(ReadBuffer, "`n")
+                line := Trim(SubStr(ReadBuffer, 1, pos - 1), "`r`n ")
+                ReadBuffer := SubStr(ReadBuffer, pos + 1)
+
+                if (line != "") {
+                    if !SessionLocked
+                        DispatchMacro(line)
+                }
             }
         }
     }

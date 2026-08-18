@@ -340,5 +340,99 @@ Get-Content STD_HotKeys.ahk | Select-String -SimpleMatch '<your new line>'
 
 If pertinent, use `. $PROFILE; upkey` to reload the AHK script.
 
+### The Edit Tool Mangles Backslashes in AHK Strings — Verify with Raw Bytes
+
+**Symptom:** Script suddenly can't open `\\.\COM5` (or any path with backslashes).
+`CreateFile` returns -1 with `ERROR_INVALID_NAME` (161). `mode COM5` confirms the port
+exists. Python can open it fine. AHK can't.
+
+**Cause:** The `edit` tool re-serializes string content and silently **inserts extra
+backslashes** when the `oldString`/`newString` contain `\\`. A path like `"\\.\\COM5"`
+(one extra `\`) produces `\\\\.\COM5` — which is not a valid Win32 device path.
+Empirically verified: the tool changed 4 bytes (`5c 5c 2e 5c` = `\\.\`) into 5 bytes
+(`5c 5c 5c 2e 5c` = `\\\\.\`) without any indication.
+
+**Fix:** After editing any splice that contains backslash-heavy strings (COM port paths,
+file paths, regex patterns), verify the raw bytes in the generated file before deploying:
+
+```pwsh
+# Check the exact bytes of a string in the splice:
+python -c "
+with open('src/10_serial.ahk', 'rb') as f: data = f.read()
+idx = data.find(b'Str')
+area = data[idx-5:idx+30]
+print(' '.join(f'{b:02x}' for b in area))
+"
+
+# Compare against git original:
+python -c "
+import subprocess
+r = subprocess.run(['git','show','HEAD:src/10_serial.ahk'], capture_output=True)
+idx = r.stdout.find(b'Str')
+area = r.stdout[idx-5:idx+30]
+print(' '.join(f'{b:02x}' for b in area))
+"
+```
+
+If the byte counts differ, fix with raw byte surgery:
+
+```python
+path = 'src/10_serial.ahk'
+with open(path, 'rb') as f: data = f.read()
+broken = bytes([0x5c, 0x5c, 0x5c, 0x2e, 0x5c])  # mangled
+fixed  = bytes([0x5c, 0x5c, 0x2e, 0x5c])           # correct
+data = data.replace(broken, fixed, 1)
+with open(path, 'wb') as f: f.write(data)
+```
+
+**Prevention:** When editing a splice that contains `\\` paths, always diff the raw
+bytes against git HEAD after the edit. Do NOT trust the rendered display — backslashes
+look identical whether there are 2 or 3.
+
+### Serial Graceful Degradation — Never `ExitApp` on COM Failure
+
+When the Arduino is not connected, the serial init block must **not** kill the script.
+The rest of the hotkeys, window management, and session lock detection must keep working.
+
+```ahk
+hCom := 0
+try {
+    hCom := DllCall("CreateFile", ...)
+} catch as err {
+    hCom := 0
+}
+
+if (hCom == -1 || hCom == 0) {
+    ToolTip(ComPort . " not available — serial buttons disabled")
+    SetTimer(() => ToolTip(), -3000)
+    hCom := 0
+} else {
+    try {
+        ; ... DCB config, timeouts, timer setup ...
+        SerialConnected := true
+    } catch as err {
+        ToolTip("Serial config failed (" . err.Message . ") — buttons disabled")
+        SetTimer(() => ToolTip(), -3000)
+        DllCall("CloseHandle", "Ptr", hCom)
+        hCom := 0
+    }
+}
+
+if SerialConnected
+    SetTimer ReadSerial, 30
+```
+
+Also guard the timer callback:
+
+```ahk
+ReadSerial() {
+    global hCom, ReadBuffer, SessionLocked
+    if !hCom
+        return
+    try {
+        ; ... ReadFile + dispatch ...
+    }
+}
+```
 
 
