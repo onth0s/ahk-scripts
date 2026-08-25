@@ -165,7 +165,7 @@ DispatchMacro(cmd) {
     }
     
     ; Clear the tooltip automatically after 1 second
-    SetTimer(() => ToolTip(), -1000) 
+    SetTimer(() => ToolTip(), -2000) 
 }
 
 ; True when the workstation is locked (Win+L / secure desktop).
