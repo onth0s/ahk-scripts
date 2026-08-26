@@ -1,31 +1,38 @@
-"""Import a .glb or .obj file passed on the command line, then frame the view.
+"""Import a .glb, .gltf, or .obj file passed on the command line into Blender.
 
-Invoked by L1__B_04 via Blender's --python flag. Blender's -- separator
-passes everything after it to sys.argv verbatim, so argv[0] is the script,
-argv[1] may be the literal "--" (skipped), and argv[2] is the file path.
+Invoked via Blender's --python flag.
 """
 import sys
-
 import bpy
 
 
 def main() -> int:
-    args = sys.argv[1:]
-    if args and args[0] == "--":
-        args = args[1:]
+    try:
+        idx = sys.argv.index("--")
+        args = sys.argv[idx + 1:]
+    except ValueError:
+        args = sys.argv[1:]
+
     if not args:
         print("usage: blender_import.py <path>")
         return 1
 
     path = args[0]
-    if path.lower().endswith(".glb"):
-        bpy.ops.import_scene.gltf(filepath=path)
-    else:
-        bpy.ops.wm.obj_import(filepath=path)
 
-    bpy.ops.view3d.view_all()
+    # Import file using native operators into the user's startup scene
+    lower = path.lower()
+    if lower.endswith((".glb", ".gltf")):
+        bpy.ops.import_scene.gltf(filepath=path)
+    elif lower.endswith(".obj"):
+        bpy.ops.wm.obj_import(filepath=path)
+    else:
+        print(f"Unsupported format: {path}")
+        return 1
+
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
+
+

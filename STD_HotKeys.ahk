@@ -145,16 +145,13 @@ DispatchMacro(cmd) {
 
             blenderExe := 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
 
-            if (raw && RegExMatch(raw, '\.(glb|obj)$', &m) && FileExist(raw)) {
-                ; --factory-startup skips the user's startup.blend (clean scene)
+            if (raw && RegExMatch(raw, 'i)\.(glb|gltf|obj)$', &m) && FileExist(raw)) {
                 ; --python runs our import script; -- separates Blender CLI
-                ; args from script args, so sys.argv[1..] in blender_import.py
-                ; contains just the file path (after the leading "--" we strip).
-                ; This avoids Blender trying to open the .glb/.obj as a
-                ; positional blend-file arg, which it cannot.
+                ; args from script args, so sys.argv after "--" in blender_import.py
+                ; contains just the file path.
                 scriptPath := A_ScriptDir . "\src\blender_import.py"
                 ToolTip("Opening " raw " in Blender...")
-                LaunchAndFocus(blenderExe, '--factory-startup --python "' scriptPath '" -- "' raw '"')
+                LaunchAndFocus(blenderExe, '--python "' scriptPath '" -- "' raw '"')
             } else {
                 ToolTip("Launching Blender...")
                 LaunchAndFocus(blenderExe)
