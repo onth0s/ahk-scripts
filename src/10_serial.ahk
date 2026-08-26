@@ -116,7 +116,30 @@ DispatchMacro(cmd) {
                 ToolTip("Launching Krita...")
                 LaunchAndFocus('C:\Program Files\Krita (x64)\bin\krita.exe')
             }
-        case "L1_K_04": ToolTip("L1__B_04")
+        case "L1_K_04":
+            raw := Trim(A_Clipboard, " `t`r`n")
+            raw := Trim(raw, "`"'")
+            if RegExMatch(raw, '^file:///')
+                raw := StrReplace(SubStr(raw, 9), "/", "\")
+            raw := ExpandTilde(raw)
+            raw := StrReplace(raw, "/", "\")
+
+            blenderExe := 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
+
+            if (raw && RegExMatch(raw, '\.(glb|obj)$', &m) && FileExist(raw)) {
+                ; --factory-startup skips the user's startup.blend (clean scene)
+                ; --python runs our import script; -- separates Blender CLI
+                ; args from script args, so sys.argv[1..] in blender_import.py
+                ; contains just the file path (after the leading "--" we strip).
+                ; This avoids Blender trying to open the .glb/.obj as a
+                ; positional blend-file arg, which it cannot.
+                scriptPath := A_ScriptDir . "\src\blender_import.py"
+                ToolTip("Opening " raw " in Blender...")
+                LaunchAndFocus(blenderExe, '--factory-startup --python "' scriptPath '" -- "' raw '"')
+            } else {
+                ToolTip("Launching Blender...")
+                LaunchAndFocus(blenderExe)
+            }
         case "L1_K_05": ToolTip("L1__B_05")
         case "L1_K_06":
             ToolTip("Launching Telegram...")

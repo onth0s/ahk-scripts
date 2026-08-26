@@ -1,5 +1,14 @@
 # AGENTS.md
 
+### To reload AHK — NEVER run the script directly, use `upkey`
+
+```pwsh
+. $PROFILE; upkey
+```
+
+This kills all `AutoHotkey*` processes, merges `src/*.ahk` → `STD_HotKeys.ahk`, and restarts.
+Never spawn the script via `Run()` or direct invocation — `upkey` kills it anyway.
+
 ## AutoHotkey v2 Gotchas
 
 ### `A_LocalAppData` (and possibly other `A_*` built-in variables) — UNSET ERROR
@@ -433,6 +442,12 @@ ReadSerial() {
         ; ... ReadFile + dispatch ...
     }
 }
+```
+
+### REMEMBER: Reload AHK with `upkey`, never directly
+
+```pwsh
+. $PROFILE; upkey
 ```
 
 
