@@ -106,6 +106,7 @@ DispatchMacro(cmd) {
         ; ═══ LAYER 1 ═════════════════════════════
         case "L1_K_01": 
             ToolTip("Launching Sublime Text...")
+            SetTimer(() => ToolTip(), -2000)
             LaunchAndFocus('C:\Program Files\Sublime Text\sublime.exe')
         case "L1_K_02": ToolTip("L1__B_02")
         case "L1_K_03":
@@ -114,6 +115,7 @@ DispatchMacro(cmd) {
                 DoubleTap("L1_K_03", () => LaunchBeeRefAndPasteImage())
             } else {
                 ToolTip("Launching Krita...")
+                SetTimer(() => ToolTip(), -2000)
                 LaunchAndFocus('C:\Program Files\Krita (x64)\bin\krita.exe')
             }
         case "L1_K_04":
@@ -132,14 +134,17 @@ DispatchMacro(cmd) {
                 ; contains just the file path.
                 scriptPath := A_ScriptDir . "\src\blender_import.py"
                 ToolTip("Opening " raw " in Blender...")
+                SetTimer(() => ToolTip(), -2000)
                 LaunchAndFocus(blenderExe, '--python "' scriptPath '" -- "' raw '"')
             } else {
                 ToolTip("Launching Blender...")
+                SetTimer(() => ToolTip(), -2000)
                 LaunchAndFocus(blenderExe)
             }
         case "L1_K_05": ToolTip("L1__B_05")
         case "L1_K_06":
             ToolTip("Launching Telegram...")
+            SetTimer(() => ToolTip(), -2000)
             LaunchAndFocus('C:\Users\Leonardo\AppData\Roaming\Telegram Desktop\Telegram.exe')
         case "L1_K_07": ToolTip("L1__B_07")
         case "L1_K_08": ToolTip("L1__B_08")
