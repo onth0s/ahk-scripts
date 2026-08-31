@@ -181,8 +181,8 @@ DispatchMacro(cmd) {
         case "L2_K_04": ToolTip("L2__B_04")
         case "L2_K_05": ToolTip("L2__B_05")
         case "L2_K_06": ToolTip("L2__B_06")
-        case "L2_K_07": Send("^#{Left}")    ; Ctrl+Win+Left → previous desktop
-        case "L2_K_08": ToolTip("L2__B_08")
+        case "L2_K_07": ToolTip("L2__B_08")
+        case "L2_K_08": Send("^#{Left}")    ; Ctrl+Win+Left → previous desktop
         case "L2_K_09": Send("^#{Right}")   ; Ctrl+Win+Right → next desktop
         ; KEY 10 is reserved for hardware layer switching
         case "L2_K_11": ToolTip("L2__B_11")
