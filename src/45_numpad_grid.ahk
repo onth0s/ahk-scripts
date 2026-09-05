@@ -77,32 +77,42 @@ if MiniGridAHI {
         SetTimer(() => ToolTip(), -3000)
         MiniGridAHI := 0
     } else {
+        SessionLockCallbacks.Push((*) => MiniGridSyncState())
         SetTimer CheckMiniGridSecondary, NUMGRID_POLL_MS
-        CheckMiniGridSecondary()   ; initial sync
+        MiniGridSyncState()   ; initial sync
     }
 }
 
 ; ═══════════════════════════════════════════════════════════════════════════════
-; ═══ WATCHDOG: arm/disable when the secondary keyboard plugs in/unplugs ═══════
+; ═══ WATCHDOG: arm/disable on secondary keyboard connect or session lock/unlock 
 ; ═══════════════════════════════════════════════════════════════════════════════
 
 CheckMiniGridSecondary() {
-    global MiniGridAHI, MiniGridArmed, MiniGridSubscribed
+    MiniGridSyncState()
+}
+
+MiniGridSyncState() {
+    global MiniGridAHI, MiniGridArmed, MiniGridSubscribed, SessionLocked
     if !MiniGridAHI
         return
-    present := MiniGridSecondaryPresent()
-    if present && !MiniGridSubscribed {
-        MiniGridSubscribe()
-        MiniGridArmed := true
-        MiniGridSubscribed := true
-        ToolTip("Numpad grid armed (secondary connected)")
-        SetTimer(() => ToolTip(), -2000)
-    } else if !present && MiniGridSubscribed {
+    shouldBeActive := !SessionLocked && MiniGridSecondaryPresent()
+    if shouldBeActive && !MiniGridSubscribed {
+        if MiniGridSubscribe() {
+            MiniGridArmed := true
+            MiniGridSubscribed := true
+            if !SessionLocked {
+                ToolTip("Numpad grid armed (secondary connected)")
+                SetTimer(() => ToolTip(), -2000)
+            }
+        }
+    } else if !shouldBeActive && MiniGridSubscribed {
         MiniGridUnsubscribe()
         MiniGridArmed := false
         MiniGridSubscribed := false
-        ToolTip("Numpad grid disabled (secondary removed)")
-        SetTimer(() => ToolTip(), -2000)
+        if !SessionLocked {
+            ToolTip("Numpad grid disabled (secondary removed)")
+            SetTimer(() => ToolTip(), -2000)
+        }
     }
 }
 

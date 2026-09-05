@@ -197,6 +197,7 @@ DispatchMacro(cmd) {
 ; Event-driven: Windows raises WM_WTSSESSION_CHANGE (0x2B1) on lock/unlock.
 ; Polling WTSConnectState is unreliable (often stays WTSActive on Win+L).
 SessionLocked := false
+SessionLockCallbacks := []
 
 RegisterSessionMonitor() {
     global SessionLocked
@@ -211,11 +212,17 @@ RegisterSessionMonitor() {
 }
 
 WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
-    global SessionLocked
+    global SessionLocked, SessionLockCallbacks
     if (wParam = 0x7)        ; WTS_SESSION_LOCK
         SessionLocked := true
     else if (wParam = 0x8)   ; WTS_SESSION_UNLOCK
         SessionLocked := false
+    else
+        return
+
+    for cb in SessionLockCallbacks {
+        try cb(SessionLocked)
+    }
 }
 
 if !RegisterSessionMonitor()

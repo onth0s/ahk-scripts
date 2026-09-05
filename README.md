@@ -116,9 +116,13 @@ Mapping (numpad key → grid K):
 | `4` | K7 |     |     |
 | `5` | K8 |     |     |
 
-K10 toggles the active layer (L1 ⇄ L2). Keys are gated by `SessionLocked` like
-the serial grid; if AHI or the Interception driver is unavailable the grid
-degrades gracefully and stays disabled.
+K10 toggles the active layer (L1 ⇄ L2). When Windows locks (`Win+L` / secure
+logon), numpad interception is immediately unsubscribed at the driver level so
+you can type your Windows password or PIN normally. Upon unlocking, the
+ButtonGrid mirror is automatically reinstated if the secondary keyboard is
+connected. Keys are also gated by `SessionLocked` like the serial grid; if AHI
+or the Interception driver is unavailable the grid degrades gracefully and
+stays disabled.
 
 The default keyboard is resolved **by handle** (`ACPI\VEN_MSNB&DEV_1001`) rather
 than by numeric id, since Interception ids can shift across reboots. If your

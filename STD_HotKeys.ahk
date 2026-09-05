@@ -216,6 +216,7 @@ DispatchMacro(cmd) {
 ; Event-driven: Windows raises WM_WTSSESSION_CHANGE (0x2B1) on lock/unlock.
 ; Polling WTSConnectState is unreliable (often stays WTSActive on Win+L).
 SessionLocked := false
+SessionLockCallbacks := []
 
 RegisterSessionMonitor() {
     global SessionLocked
@@ -230,11 +231,17 @@ RegisterSessionMonitor() {
 }
 
 WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
-    global SessionLocked
+    global SessionLocked, SessionLockCallbacks
     if (wParam = 0x7)        ; WTS_SESSION_LOCK
         SessionLocked := true
     else if (wParam = 0x8)   ; WTS_SESSION_UNLOCK
         SessionLocked := false
+    else
+        return
+
+    for cb in SessionLockCallbacks {
+        try cb(SessionLocked)
+    }
 }
 
 if !RegisterSessionMonitor()
@@ -492,32 +499,42 @@ if MiniGridAHI {
         SetTimer(() => ToolTip(), -3000)
         MiniGridAHI := 0
     } else {
+        SessionLockCallbacks.Push((*) => MiniGridSyncState())
         SetTimer CheckMiniGridSecondary, NUMGRID_POLL_MS
-        CheckMiniGridSecondary()   ; initial sync
+        MiniGridSyncState()   ; initial sync
     }
 }
 
 ; ═══════════════════════════════════════════════════════════════════════════════
-; ═══ WATCHDOG: arm/disable when the secondary keyboard plugs in/unplugs ═══════
+; ═══ WATCHDOG: arm/disable on secondary keyboard connect or session lock/unlock 
 ; ═══════════════════════════════════════════════════════════════════════════════
 
 CheckMiniGridSecondary() {
-    global MiniGridAHI, MiniGridArmed, MiniGridSubscribed
+    MiniGridSyncState()
+}
+
+MiniGridSyncState() {
+    global MiniGridAHI, MiniGridArmed, MiniGridSubscribed, SessionLocked
     if !MiniGridAHI
         return
-    present := MiniGridSecondaryPresent()
-    if present && !MiniGridSubscribed {
-        MiniGridSubscribe()
-        MiniGridArmed := true
-        MiniGridSubscribed := true
-        ToolTip("Numpad grid armed (secondary connected)")
-        SetTimer(() => ToolTip(), -2000)
-    } else if !present && MiniGridSubscribed {
+    shouldBeActive := !SessionLocked && MiniGridSecondaryPresent()
+    if shouldBeActive && !MiniGridSubscribed {
+        if MiniGridSubscribe() {
+            MiniGridArmed := true
+            MiniGridSubscribed := true
+            if !SessionLocked {
+                ToolTip("Numpad grid armed (secondary connected)")
+                SetTimer(() => ToolTip(), -2000)
+            }
+        }
+    } else if !shouldBeActive && MiniGridSubscribed {
         MiniGridUnsubscribe()
         MiniGridArmed := false
         MiniGridSubscribed := false
-        ToolTip("Numpad grid disabled (secondary removed)")
-        SetTimer(() => ToolTip(), -2000)
+        if !SessionLocked {
+            ToolTip("Numpad grid disabled (secondary removed)")
+            SetTimer(() => ToolTip(), -2000)
+        }
     }
 }
 
