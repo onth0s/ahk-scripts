@@ -906,6 +906,13 @@ MonitorPhysicalSize(hwnd, width, height) {
     return (monWidth = width && monHeight = height)
 }
 
+; Win+F1 fallback: swallow everywhere else so Windows Help never opens.
+; The context variants above take precedence when their #HotIf matches.
+#F1:: {
+    ToolTip("Win+F1 — no action")
+    SetTimer(() => ToolTip(), -500)
+}
+
 ; ═══ DEBUG TOOLS ══════════════════════════════════════════════════════════════
 
 ; Ctrl+Alt+Shift+Win+. — Show active window info (title, class, process, position, size)

@@ -287,3 +287,10 @@ MonitorPhysicalSize(hwnd, width, height) {
     monHeight := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")    ; rcMonitor.bottom - rcMonitor.top
     return (monWidth = width && monHeight = height)
 }
+
+; Win+F1 fallback: swallow everywhere else so Windows Help never opens.
+; The context variants above take precedence when their #HotIf matches.
+#F1:: {
+    ToolTip("Win+F1 — no action")
+    SetTimer(() => ToolTip(), -500)
+}
