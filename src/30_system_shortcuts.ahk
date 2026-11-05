@@ -47,9 +47,13 @@
 ; Ctrl+Alt+Win+Up — Volume up by 1
 ^#!Up:: {
     SoundSetVolume("+1")
+    ToolTip("Volume: " . Round(SoundGetVolume()) . "%")
+    SetTimer(() => ToolTip(), -1000)
 }
 
 ; Ctrl+Alt+Win+Down — Volume down by 1
 ^#!Down:: {
     SoundSetVolume("-1")
+    ToolTip("Volume: " . Round(SoundGetVolume()) . "%")
+    SetTimer(() => ToolTip(), -1000)
 }
