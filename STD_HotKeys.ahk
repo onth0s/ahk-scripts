@@ -17,270 +17,22 @@ if !A_IsAdmin {
 }
 
 Persistent() ; <--- CRITICAL FIX: Forces script to stay alive in the background
-
-ComPort := "COM5"   ; Your Nano's COM port
-BaudRate := 9600
-SerialConnected := false
-
-; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
-; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
-; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
-
-; --- NATIVE WINDOWS SERIAL CONNECTION ---
-hCom := 0
-try {
-    hCom := DllCall("CreateFile"
-        , "Str", "\\.\" . ComPort
-        , "UInt", 0xC0000000  ; GENERIC_READ | GENERIC_WRITE
-        , "UInt", 0           ; No sharing
-        , "Ptr", 0            ; Security attributes
-        , "UInt", 3           ; OPEN_EXISTING
-        , "UInt", 0           ; Flags
-        , "Ptr", 0, "Ptr")
-} catch as err {
-    hCom := 0
-}
-
-if (hCom == -1 || hCom == 0) {
-    ToolTip(ComPort . " not available — serial buttons disabled")
-    SetTimer(() => ToolTip(), -3000)
-    hCom := 0
-} else {
-    try {
-        ; CRITICAL FIX: Give the Arduino 2 seconds to reboot after the DTR toggle
-        Sleep(2000)
-
-        ; Build DCB safely using Windows API parser string
-        DCB := Buffer(28, 0)       ; FIX: DCB struct size is exactly 28 bytes
-        NumPut("UInt", 28, DCB, 0) ; Set DCBlength
-
-        if !DllCall("GetCommState", "Ptr", hCom, "Ptr", DCB)
-            throw Error("GetCommState failed")
-
-        ; Use BuildCommDCB to avoid manual struct bitfield offset corruption
-        if !DllCall("BuildCommDCBW", "Str", "baud=" . BaudRate . " parity=N data=8 stop=1", "Ptr", DCB)
-            throw Error("BuildCommDCB failed")
-
-        if !DllCall("SetCommState", "Ptr", hCom, "Ptr", DCB)
-            throw Error("SetCommState failed")
-
-        ; Toggle DTR & RTS lines to wake up Arduino Nano USB-Serial chip
-        SETRTS := 3, SETDTR := 5
-        DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETDTR)
-        DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETRTS)
-
-        ; Set Timeouts (non-blocking read)
-        Timeouts := Buffer(20, 0)
-        NumPut("UInt", 0xFFFFFFFF, Timeouts, 0) ; FIX: Safer UInt mapping for MAXDWORD
-        DllCall("SetCommTimeouts", "Ptr", hCom, "Ptr", Timeouts)
-
-        OnExit((*) => DllCall("CloseHandle", "Ptr", hCom))
-        SerialConnected := true
-    } catch as err {
-        ToolTip("Serial config failed (" . err.Message . ") — buttons disabled")
-        SetTimer(() => ToolTip(), -3000)
-        DllCall("CloseHandle", "Ptr", hCom)
-        hCom := 0
-    }
-}
-
-ReadBuffer := ""
-
-if SerialConnected
-    SetTimer ReadSerial, 30
-
-ReadSerial() {
-    global hCom, ReadBuffer, SessionLocked
-    if !hCom
-        return
-    try {
-        buf := Buffer(64, 0)
-        bytesRead := 0
-
-        ; Pass buf.Ptr to Write/Read raw memory correctly
-        if DllCall("ReadFile", "Ptr", hCom, "Ptr", buf.Ptr, "UInt", 64, "UInt*", &bytesRead, "Ptr", 0) && bytesRead > 0 {
-            ReadBuffer .= StrGet(buf.Ptr, bytesRead, "UTF-8")
-
-            ; Process complete line when newline received
-            while InStr(ReadBuffer, "`n") {
-                pos := InStr(ReadBuffer, "`n")
-                line := Trim(SubStr(ReadBuffer, 1, pos - 1), "`r`n ")
-                ReadBuffer := SubStr(ReadBuffer, pos + 1)
-
-                if (line != "") {
-                    if !SessionLocked
-                        DispatchMacro(line)
-                }
-            }
-        }
-    }
-}
-
-; --- MACRO MAPPINGS ---
-DispatchMacro(cmd) {
-    global DoubleTapTaps, DoubleTapLastKey
-    if (DoubleTapLastKey != cmd)
-        DoubleTapTaps.Clear()   ; any other key cancels pending taps
-    switch cmd {
-        ; ═══ LAYER 1 ═════════════════════════════
-        case "L1_K_01": 
-            ToolTip("Launching Sublime Text...")
-            SetTimer(() => ToolTip(), -2000)
-            LaunchAndFocus('C:\Program Files\Sublime Text\sublime.exe')
-        case "L1_K_02": ToolTip("L1__B_02")
-        case "L1_K_03":
-            if ProcessExist("krita.exe") {
-                ToolTip("Double-tap to paste image in BeeRef")
-                DoubleTap("L1_K_03", () => LaunchBeeRefAndPasteImage())
-            } else {
-                ToolTip("Launching Krita...")
-                SetTimer(() => ToolTip(), -2000)
-                LaunchAndFocus('C:\Program Files\Krita (x64)\bin\krita.exe')
-            }
-        case "L1_K_04":
-            raw := Trim(A_Clipboard, " `t`r`n")
-            raw := Trim(raw, "`"'")
-            if RegExMatch(raw, '^file:///')
-                raw := StrReplace(SubStr(raw, 9), "/", "\")
-            raw := ExpandTilde(raw)
-            raw := StrReplace(raw, "/", "\")
-
-            blenderExe := 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
-
-            if (raw && RegExMatch(raw, 'i)\.(glb|gltf|obj)$', &m) && FileExist(raw)) {
-                ; --python runs our import script; -- separates Blender CLI
-                ; args from script args, so sys.argv after "--" in blender_import.py
-                ; contains just the file path.
-                scriptPath := A_ScriptDir . "\src\blender_import.py"
-                ToolTip("Opening " raw " in Blender...")
-                SetTimer(() => ToolTip(), -2000)
-                LaunchAndFocus(blenderExe, '--python "' scriptPath '" -- "' raw '"')
-            } else {
-                ToolTip("Launching Blender...")
-                SetTimer(() => ToolTip(), -2000)
-                LaunchAndFocus(blenderExe)
-            }
-        case "L1_K_05": ToolTip("L1__B_05")
-        case "L1_K_06":
-            ToolTip("Launching Telegram...")
-            SetTimer(() => ToolTip(), -2000)
-            LaunchAndFocus('C:\Users\Leonardo\AppData\Roaming\Telegram Desktop\Telegram.exe')
-        case "L1_K_07": ToolTip("L1__B_07")
-        case "L1_K_08": ToolTip("L1__B_08")
-        case "L1_K_09": ToolTip("L1__B_09")
-        ; KEY 10 is reserved for hardware layer switching
-        ; L1_K_11: open opencode in Windows Terminal at the clipboard path
-        case "L1_K_11":
-            raw := Trim(A_Clipboard, " `t`r`n")
-            raw := Trim(raw, "`"'")               ; strip surrounding quotes of either type
-            if RegExMatch(raw, '^file:///')
-                raw := StrReplace(SubStr(raw, 9), "/", "\")
-            raw := ExpandTilde(raw)
-            raw := StrReplace(raw, "/", "\")       ; normalize remaining separators
-
-            if !raw {
-                ToolTip("Clipboard is empty — copy a path first")
-                SetTimer(() => ToolTip(), -2000)
-            } else if DirExist(raw) {
-                LaunchOpencode(raw)
-            } else if FileExist(raw) {
-                SplitPath(raw, , &dir)               ; file path → its folder
-                LaunchOpencode(dir)
-            } else {
-                ToolTip("Not a valid path: " raw)
-                SetTimer(() => ToolTip(), -2000)
-            }
-        case "L1_K_12":
-            DoubleTap("L1_K_12", () => Send("^#{x}"))
-
-        ; ═══ LAYER 2 ═════════════════════════════
-        case "L2_K_01": ToolTip("L2__B_01")
-        case "L2_K_02": ToolTip("L2__B_02")
-        case "L2_K_03": ToolTip("L2__B_03")
-        case "L2_K_04": ToolTip("L2__B_04")
-        case "L2_K_05": ToolTip("L2__B_05")
-        case "L2_K_06": ToolTip("L2__B_06")
-        case "L2_K_07": ToolTip("L2__B_08")
-        case "L2_K_08": Send("^#{Left}")    ; Ctrl+Win+Left → previous desktop
-        case "L2_K_09": Send("^#{Right}")   ; Ctrl+Win+Right → next desktop
-        ; KEY 10 is reserved for hardware layer switching
-        case "L2_K_11": ToolTip("L2__B_11")
-        case "L2_K_12": ToolTip("L2__B_12")
-    }
-    
-    ; Clear the tooltip automatically after 1 second
-    SetTimer(() => ToolTip(), -2000) 
-}
-
-; True when the workstation is locked (Win+L / secure desktop).
-; Event-driven: Windows raises WM_WTSSESSION_CHANGE (0x2B1) on lock/unlock.
-; Polling WTSConnectState is unreliable (often stays WTSActive on Win+L).
-SessionLocked := false
-SessionLockCallbacks := []
-
-RegisterSessionMonitor() {
-    global SessionLocked
-    if !DllCall("wtsapi32.dll\WTSRegisterSessionNotificationEx"
-        , "Ptr", 0, "Ptr", A_ScriptHwnd, "UInt", 1)   ; NOTIFY_FOR_ALL_SESSIONS
-        return false
-    OnMessage(0x02B1, WM_WTSSESSION_CHANGE)
-    ; Sync in case the script started while already locked: foreground is
-    ; LockApp.exe during the lock curtain; no active window on secure logon.
-    SessionLocked := !WinExist("A") || (WinGetProcessName("A") = "LockApp.exe")
-    return true
-}
-
-WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
-    global SessionLocked, SessionLockCallbacks
-    if (wParam = 0x7)        ; WTS_SESSION_LOCK
-        SessionLocked := true
-    else if (wParam = 0x8)   ; WTS_SESSION_UNLOCK
-        SessionLocked := false
-    else
-        return
-
-    for cb in SessionLockCallbacks {
-        try cb(SessionLocked)
-    }
-}
-
-if !RegisterSessionMonitor()
-    ToolTip("Session monitor failed to register")
-
-; ── Double-tap state ──
-; Pending taps per key (keyName → last press tick) + last key that engaged DoubleTap.
-DoubleTapTaps   := Map()
-DoubleTapLastKey := ""
-
-; Fire `action` only when `keyName` is pressed twice within `window` ms.
-; A different key pressed in between cancels the pending tap (anti-misfire).
-DoubleTap(keyName, action, window := 400) {
-    global DoubleTapTaps, DoubleTapLastKey
-    if (DoubleTapLastKey != keyName) {
-        DoubleTapTaps.Clear()
-        DoubleTapLastKey := keyName
-    }
-    if DoubleTapTaps.Has(keyName) && (A_TickCount - DoubleTapTaps[keyName]) <= window {
-        DoubleTapTaps.Delete(keyName)
-        action()
-        return
-    }
-    DoubleTapTaps[keyName] := A_TickCount
-}
-
-; Launch BeeRef and let it paste the clipboard image itself via --paste.
-; The GUI window belongs to the child pythonw.exe process (pip distlib
-; launcher spawns it and waits), so match that, NOT beeref.exe.
-LaunchBeeRefAndPasteImage() {
-    LaunchAndFocus('C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe', '--paste', 'pythonw.exe')
-}
-
-; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
-; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
-; ═══ BUTTON GRID ═════════════════════════════════════════════════════════
-
 ; ═══ CONFIGURATION ════════════════════════════════════════════════════════════
 ; Tunable values — edit these to adjust behavior without touching logic.
+
+; Hardware serial button grid
+ComPort  := "COM5"   ; Nano COM port
+BaudRate := 9600
+
+; External applications & paths
+DIR_DOWNLOADS := "C:\Users\Leonardo\Downloads"
+APP_SUBLIME   := 'C:\Program Files\Sublime Text\sublime.exe'
+APP_KRITA     := 'C:\Program Files\Krita (x64)\bin\krita.exe'
+APP_BLENDER   := 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
+APP_TELEGRAM  := 'C:\Users\Leonardo\AppData\Roaming\Telegram Desktop\Telegram.exe'
+APP_BEEREF    := 'C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe'
+APP_WT        := EnvGet("LOCALAPPDATA") . "\Microsoft\WindowsApps\wt.exe"
+APP_EXPLORER  := 'C:\Windows\explorer.exe'
 
 ; Terminal opacity toggle
 OPACITY_HIGH := 90
@@ -324,30 +76,359 @@ SETTINGS_H := 700
 DIMMER_X := 7
 DIMMER_Y := 709
 
+; Numpad grid (AutoHotInterception)
+NUMGRID_SECONDARY_VID := 0x248A
+NUMGRID_SECONDARY_PID := 0x8367
+; Default keyboard: ACPI embedded keyboard. Resolved by handle (ids can shift
+; across reboots). List extra candidate handles if the physical keyboard spans
+; more than one HID collection.
+NUMGRID_DEFAULT_HANDLES := [
+    "ACPI\VEN_MSNB&DEV_1001",
+]
+NUMGRID_POLL_MS := 2000
+; ═══ CORE UTILITIES ═══════════════════════════════════════════════════════════
+; Shared runtime helpers: notifications, session monitoring, double-tap,
+; shell execution, and path normalization.
+
+; ── Notification ToolTip Manager ──
+; Uses a dedicated, reusable function object to clear tooltips without timer collision.
+Notify(msg, durationMs := 2000) {
+    static clearFn := () => ToolTip()
+    SetTimer(clearFn, 0)  ; Cancel any pending clear
+    ToolTip(msg)
+    if durationMs > 0
+        SetTimer(clearFn, -Abs(durationMs))
+}
+
+; ── Workstation Session Monitor (Win+L / Secure Desktop) ──
+; Event-driven: Windows raises WM_WTSSESSION_CHANGE (0x2B1) on lock/unlock.
+; Polling WTSConnectState is unreliable (often stays WTSActive on Win+L).
+SessionLocked := false
+SessionLockCallbacks := []
+
+RegisterSessionMonitor() {
+    global SessionLocked
+    if !DllCall("wtsapi32.dll\WTSRegisterSessionNotificationEx"
+        , "Ptr", 0, "Ptr", A_ScriptHwnd, "UInt", 1)   ; NOTIFY_FOR_ALL_SESSIONS
+        return false
+    OnMessage(0x02B1, WM_WTSSESSION_CHANGE)
+    ; Sync in case the script started while already locked: foreground is
+    ; LockApp.exe during the lock curtain; no active window on secure logon.
+    SessionLocked := !WinExist("A") || (WinGetProcessName("A") = "LockApp.exe")
+    return true
+}
+
+WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
+    global SessionLocked, SessionLockCallbacks
+    if (wParam = 0x7)        ; WTS_SESSION_LOCK
+        SessionLocked := true
+    else if (wParam = 0x8)   ; WTS_SESSION_UNLOCK
+        SessionLocked := false
+    else
+        return
+
+    for cb in SessionLockCallbacks {
+        try cb(SessionLocked)
+    }
+}
+
+if !RegisterSessionMonitor()
+    Notify("Session monitor failed to register", 3000)
+
+; ── Double-Tap State Machine ──
+; Pending taps per key (keyName -> last press tick) + last key that engaged DoubleTap.
+DoubleTapTaps    := Map()
+DoubleTapLastKey := ""
+
+DoubleTap(keyName, action, window := 400) {
+    global DoubleTapTaps, DoubleTapLastKey
+    if (DoubleTapLastKey != keyName) {
+        DoubleTapTaps.Clear()
+        DoubleTapLastKey := keyName
+    }
+    if DoubleTapTaps.Has(keyName) && (A_TickCount - DoubleTapTaps[keyName]) <= window {
+        DoubleTapTaps.Delete(keyName)
+        action()
+        return
+    }
+    DoubleTapTaps[keyName] := A_TickCount
+}
+
+; ── Shell Execution (De-elevation) ──
+; Run a program at user (non-elevated) integrity level via the desktop shell.
+; Source: AutoHotkeyUX/inc/ShellRun.ahk (Lexikos), AHK v2 port.
+ShellRun(filePath, arguments?, directory?, operation?, show?) {
+    static VT_UI4 := 0x13, SWC_DESKTOP := ComValue(VT_UI4, 0x8)
+    ComObject("Shell.Application").Windows.Item(SWC_DESKTOP).Document.Application
+        .ShellExecute(filePath, arguments?, directory?, operation?, show?)
+}
+
+; ── Path Normalization Helpers ──
+; Expand a leading "~" (pwsh-style home) to the user profile directory.
+; Accepts "~/path", "~\" or bare "~". Other input is returned unchanged.
+ExpandTilde(path) {
+    if path = "~"
+        return EnvGet("USERPROFILE")
+    if RegExMatch(path, '^~[\\/]')
+        return StrReplace(EnvGet("USERPROFILE") . SubStr(path, 2), "/", "\")
+    return path
+}
+
+; Extract and sanitize a file or directory path from the clipboard.
+; Strips leading/trailing whitespace, quotes, file:/// scheme, expands tildes,
+; and normalizes slashes to Windows backslashes.
+GetClipboardPath(&outPath) {
+    raw := Trim(A_Clipboard, " `t`r`n")
+    raw := Trim(raw, "`"'")
+    if RegExMatch(raw, '^file:///')
+        raw := StrReplace(SubStr(raw, 9), "/", "\")
+    raw := ExpandTilde(raw)
+    raw := StrReplace(raw, "/", "\")
+    outPath := raw
+    return outPath != ""
+}
+
+SerialConnected := false
+
+; ═══ SERIAL BUTTON GRID (HARDWARE) ═══════════════════════════════════════════
+
+; --- Native Windows Serial Connection ---
+hCom := 0
+try {
+    hCom := DllCall("CreateFile"
+        , "Str", "\\.\" . ComPort
+        , "UInt", 0xC0000000  ; GENERIC_READ | GENERIC_WRITE
+        , "UInt", 0           ; No sharing
+        , "Ptr", 0            ; Security attributes
+        , "UInt", 3           ; OPEN_EXISTING
+        , "UInt", 0           ; Flags
+        , "Ptr", 0, "Ptr")
+} catch as err {
+    hCom := 0
+}
+
+if (hCom == -1 || hCom == 0) {
+    Notify(ComPort . " not available — serial buttons disabled", 3000)
+    hCom := 0
+} else {
+    try {
+        ; Build DCB safely using Windows API parser string
+        DCB := Buffer(28, 0)       ; DCB struct size is 28 bytes
+        NumPut("UInt", 28, DCB, 0) ; Set DCBlength
+
+        if !DllCall("GetCommState", "Ptr", hCom, "Ptr", DCB)
+            throw Error("GetCommState failed")
+
+        ; Use BuildCommDCB to avoid manual struct bitfield offset corruption
+        if !DllCall("BuildCommDCBW", "Str", "baud=" . BaudRate . " parity=N data=8 stop=1", "Ptr", DCB)
+            throw Error("BuildCommDCB failed")
+
+        if !DllCall("SetCommState", "Ptr", hCom, "Ptr", DCB)
+            throw Error("SetCommState failed")
+
+        ; Toggle DTR & RTS lines to wake up Arduino Nano USB-Serial chip
+        SETRTS := 3, SETDTR := 5
+        DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETDTR)
+        DllCall("EscapeCommFunction", "Ptr", hCom, "UInt", SETRTS)
+
+        ; Set Timeouts (non-blocking read)
+        Timeouts := Buffer(20, 0)
+        NumPut("UInt", 0xFFFFFFFF, Timeouts, 0) ; UInt mapping for MAXDWORD
+        DllCall("SetCommTimeouts", "Ptr", hCom, "Ptr", Timeouts)
+
+        OnExit((*) => (hCom ? DllCall("CloseHandle", "Ptr", hCom) : 0))
+        SerialConnected := true
+    } catch as err {
+        Notify("Serial config failed (" . err.Message . ") — buttons disabled", 3000)
+        DllCall("CloseHandle", "Ptr", hCom)
+        hCom := 0
+    }
+}
+
+ReadBuffer := ""
+
+; Start polling serial input after Arduino boot delay
+if SerialConnected
+    SetTimer(StartSerialPolling, -2000)
+
+StartSerialPolling() {
+    global hCom
+    if hCom
+        SetTimer(ReadSerial, 30)
+}
+
+CloseSerialPort(reason := "") {
+    global hCom, SerialConnected
+    SetTimer(ReadSerial, 0)
+    if hCom {
+        DllCall("CloseHandle", "Ptr", hCom)
+        hCom := 0
+    }
+    SerialConnected := false
+    if reason != ""
+        Notify("Serial disconnected: " . reason, 3000)
+}
+
+ReadSerial() {
+    global hCom, ReadBuffer, SessionLocked
+    if !hCom
+        return
+    try {
+        buf := Buffer(64, 0)
+        bytesRead := 0
+
+        ; Pass buf.Ptr to Write/Read raw memory correctly
+        if DllCall("ReadFile", "Ptr", hCom, "Ptr", buf.Ptr, "UInt", 64, "UInt*", &bytesRead, "Ptr", 0) {
+            if bytesRead > 0 {
+                ReadBuffer .= StrGet(buf.Ptr, bytesRead, "UTF-8")
+
+                ; Prevent unbounded buffer growth on noisy serial line
+                if StrLen(ReadBuffer) > 2048
+                    ReadBuffer := SubStr(ReadBuffer, -1024)
+
+                ; Process complete line when newline received
+                while InStr(ReadBuffer, "`n") {
+                    pos := InStr(ReadBuffer, "`n")
+                    line := Trim(SubStr(ReadBuffer, 1, pos - 1), "`r`n ")
+                    ReadBuffer := SubStr(ReadBuffer, pos + 1)
+
+                    if (line != "") {
+                        if !SessionLocked
+                            DispatchMacro(line)
+                    }
+                }
+            }
+        } else {
+            ; ReadFile returned 0: detect disconnect / device unplugged
+            errCode := DllCall("GetLastError", "UInt")
+            if (errCode == 5 || errCode == 22 || errCode == 1167) ; ERROR_ACCESS_DENIED, ERROR_BAD_COMMAND, ERROR_DEVICE_NOT_CONNECTED
+                CloseSerialPort("Device unplugged or lost")
+        }
+    } catch {
+        CloseSerialPort("Read exception")
+    }
+}
+
+; ═══ MACRO DISPATCH TABLE ═════════════════════════════════════════════════════
+; Dispatches ButtonGrid commands (L1_K_* and L2_K_*) for both the serial hardware
+; pad and the numpad grid mirror.
+
+DispatchMacro(cmd) {
+    global DoubleTapTaps, DoubleTapLastKey
+    if (DoubleTapLastKey != cmd)
+        DoubleTapTaps.Clear()   ; any other key cancels pending taps
+
+    switch cmd {
+        ; ═══ LAYER 1 ═════════════════════════════
+        case "L1_K_01": 
+            Notify("Launching Sublime Text...")
+            LaunchAndFocus(APP_SUBLIME)
+
+        case "L1_K_02": 
+            Notify("L1__B_02")
+
+        case "L1_K_03":
+            if ProcessExist("krita.exe") {
+                Notify("Double-tap to paste image in BeeRef")
+                DoubleTap("L1_K_03", () => LaunchBeeRefAndPasteImage())
+            } else {
+                Notify("Launching Krita...")
+                LaunchAndFocus(APP_KRITA)
+            }
+
+        case "L1_K_04":
+            GetClipboardPath(&raw)
+            if (raw && RegExMatch(raw, 'i)\.(glb|gltf|obj)$', &m) && FileExist(raw)) {
+                scriptPath := A_ScriptDir . "\src\blender_import.py"
+                Notify("Opening " raw " in Blender...")
+                LaunchAndFocus(APP_BLENDER, '--python "' scriptPath '" -- "' raw '"')
+            } else {
+                Notify("Launching Blender...")
+                LaunchAndFocus(APP_BLENDER)
+            }
+
+        case "L1_K_05": 
+            Notify("L1__B_05")
+
+        case "L1_K_06":
+            Notify("Launching Telegram...")
+            LaunchAndFocus(APP_TELEGRAM)
+
+        case "L1_K_07": 
+            Notify("L1__B_07")
+
+        case "L1_K_08": 
+            Notify("L1__B_08")
+
+        case "L1_K_09": 
+            Notify("L1__B_09")
+
+        ; KEY 10 is reserved for hardware / virtual layer switching
+
+        ; L1_K_11: open opencode in Windows Terminal at the clipboard path
+        case "L1_K_11":
+            GetClipboardPath(&raw)
+            if !raw {
+                Notify("Clipboard is empty — copy a path first")
+            } else if DirExist(raw) {
+                LaunchOpencode(raw)
+            } else if FileExist(raw) {
+                SplitPath(raw, , &dir)
+                LaunchOpencode(dir)
+            } else {
+                Notify("Not a valid path: " raw)
+            }
+
+        case "L1_K_12":
+            DoubleTap("L1_K_12", () => Send("^#{x}"))
+
+        ; ═══ LAYER 2 ═════════════════════════════
+        case "L2_K_01": Notify("L2__B_01")
+        case "L2_K_02": Notify("L2__B_02")
+        case "L2_K_03": Notify("L2__B_03")
+        case "L2_K_04": Notify("L2__B_04")
+        case "L2_K_05": Notify("L2__B_05")
+        case "L2_K_06": Notify("L2__B_06")
+        case "L2_K_07": Notify("L2__B_07")
+        case "L2_K_08": Send("^#{Left}")    ; Ctrl+Win+Left → previous desktop
+        case "L2_K_09": Send("^#{Right}")   ; Ctrl+Win+Right → next desktop
+        ; KEY 10 is reserved for hardware layer switching
+        case "L2_K_11": Notify("L2__B_11")
+        case "L2_K_12": Notify("L2__B_12")
+    }
+}
+
+; Launch BeeRef and let it paste the clipboard image itself via --paste.
+; The GUI window belongs to the child pythonw.exe process (pip distlib
+; launcher spawns it and waits), so match that, NOT beeref.exe.
+LaunchBeeRefAndPasteImage() {
+    LaunchAndFocus(APP_BEEREF, '--paste', 'pythonw.exe')
+}
+
 ; ═══ SYSTEM SHORTCUTS ═════════════════════════════════════════════════════════
 
 ; Ctrl+Alt+Win+ñ — Reload the script via the upkey shell command
 ^#!ñ::
 {
-    MsgBox("Script reloaded!", "Success", "Iconi T1")
+    Notify("Reloading script via upkey...", 1000)
     Run('pwsh.exe -NoLogo -Command ". $PROFILE; upkey"')
 }
 
 ; Ctrl+Alt+Win+p — Open the splice sources folder (this file is generated by merge.py)
 ^#!p::
 {
-    LaunchAndFocus('C:\Windows\explorer.exe', '"' A_ScriptDir '\src"')
+    LaunchAndFocus(APP_EXPLORER, '"' A_ScriptDir '\src"')
 }
 
 ; Win+E — Open Downloads in File Explorer
 #e::
 {
-    LaunchAndFocus('C:\Windows\explorer.exe', '"C:\Users\Leonardo\Downloads"')
+    LaunchAndFocus(APP_EXPLORER, '"' DIR_DOWNLOADS '"')
 }
 
 ; Ctrl+Win+T — Launch Windows Terminal
 ^#t:: {
-    LaunchAndFocus(EnvGet("LOCALAPPDATA") . "\Microsoft\WindowsApps\wt.exe", "", "WindowsTerminal.exe")
+    LaunchAndFocus(APP_WT, "", "WindowsTerminal.exe")
 }
 
 ; Ctrl+Alt+Shift+Win (all combos) — Block Office/M365 global intercept.
@@ -373,8 +454,7 @@ DIMMER_Y := 709
 ^#!Up:: {
     SoundSetVolume("+1")
     if !(ProcessExist("overwatch.exe") && WinActive("ahk_exe overwatch.exe")) {
-        ToolTip("Volume: " . Round(SoundGetVolume()) . "%")
-        SetTimer(() => ToolTip(), -1000)
+        Notify("Volume: " . Round(SoundGetVolume()) . "%", 1000)
     }
 }
 
@@ -382,8 +462,7 @@ DIMMER_Y := 709
 ^#!Down:: {
     SoundSetVolume("-1")
     if !(ProcessExist("overwatch.exe") && WinActive("ahk_exe overwatch.exe")) {
-        ToolTip("Volume: " . Round(SoundGetVolume()) . "%")
-        SetTimer(() => ToolTip(), -1000)
+        Notify("Volume: " . Round(SoundGetVolume()) . "%", 1000)
     }
 }
 
@@ -430,18 +509,7 @@ $!F10::Send("9")
 ;   BloqNum -> K3  9 -> K6   6 -> K9   3 -> K12
 ;   / * 0 Enter are NOT mapped and keep normal behavior.
 
-#Include "C:\Users\Leonardo\001\00__DEV\zz - VAR\AutoHotkey\lib\numpad_grid\AutoHotInterception.ahk"
-
-; ── Config ─────────────────────────────────────────────────────────────────────
-NUMGRID_SECONDARY_VID := 0x248A
-NUMGRID_SECONDARY_PID := 0x8367
-; Default keyboard: ACPI embedded keyboard. Resolved by handle (ids can shift
-; across reboots). List extra candidate handles if the physical keyboard spans
-; more than one HID collection.
-NUMGRID_DEFAULT_HANDLES := [
-    "ACPI\VEN_MSNB&DEV_1001",
-]
-NUMGRID_POLL_MS := 2000
+#Include "%A_ScriptDir%\lib\numpad_grid\AutoHotInterception.ahk"
 
 ; scan code -> K number (10 = layer switch)
 NUMGRID_MAP := Map(
@@ -460,10 +528,10 @@ NUMGRID_MAP := Map(
 )
 
 ; ── State ──────────────────────────────────────────────────────────────────────
-MiniGridLayer     := 0          ; 0 = L1, 1 = L2
-MiniGridArmed     := false      ; secondary present AND subscribed
-MiniGridSubscribed:= false
-MiniGridIds       := []         ; resolved AHI ids for the default keyboard
+MiniGridLayer      := 0          ; 0 = L1, 1 = L2
+MiniGridArmed      := false      ; secondary present AND subscribed
+MiniGridSubscribed := false
+MiniGridIds        := []         ; resolved AHI ids for the default keyboard
 
 ; ═══════════════════════════════════════════════════════════════════════════════
 ; ═══ INIT ═════════════════════════════════════════════════════════════════════
@@ -473,28 +541,34 @@ try {
     MiniGridAHI := AutoHotInterception()
 } catch as err {
     MiniGridAHI := 0
-    ToolTip("AutoHotInterception unavailable — numpad grid disabled (" err.Message ")")
-    SetTimer(() => ToolTip(), -3000)
+    Notify("AutoHotInterception unavailable — numpad grid disabled (" err.Message ")", 3000)
 }
 
 if MiniGridAHI {
     ; Resolve default keyboard ids from the device list by handle.
-    devs := MiniGridAHI.GetDeviceList()
-    for id, d in devs {
-        if d.IsMouse
-            continue
-        for h in NUMGRID_DEFAULT_HANDLES {
-            if (d.Handle = h)
-                MiniGridIds.Push(id)
+    try {
+        devs := MiniGridAHI.GetDeviceList()
+        for id, d in devs {
+            if d.IsMouse
+                continue
+            for h in NUMGRID_DEFAULT_HANDLES {
+                if (d.Handle = h)
+                    MiniGridIds.Push(id)
+            }
         }
+    } catch {
+        MiniGridIds := []
     }
+
     if MiniGridIds.Length = 0 {
-        ToolTip("Numpad grid: default keyboard handle not found — grid disabled")
-        SetTimer(() => ToolTip(), -3000)
+        Notify("Numpad grid: default keyboard handle not found — grid disabled", 3000)
         MiniGridAHI := 0
     } else {
         SessionLockCallbacks.Push((*) => MiniGridSyncState())
-        SetTimer CheckMiniGridSecondary, NUMGRID_POLL_MS
+        ; Listen for USB plug/unplug events
+        OnMessage(0x0219, OnMiniGridDeviceChange)
+        ; Background safety poll (every 5 seconds)
+        SetTimer CheckMiniGridSecondary, 5000
         MiniGridSyncState()   ; initial sync
     }
 }
@@ -502,6 +576,12 @@ if MiniGridAHI {
 ; ═══════════════════════════════════════════════════════════════════════════════
 ; ═══ WATCHDOG: arm/disable on secondary keyboard connect or session lock/unlock 
 ; ═══════════════════════════════════════════════════════════════════════════════
+
+OnMiniGridDeviceChange(wParam, lParam, msg, hwnd) {
+    ; DBT_DEVNODES_CHANGED = 0x0007
+    if (wParam = 7)
+        SetTimer(MiniGridSyncState, -200) ; debounced sync
+}
 
 CheckMiniGridSecondary() {
     MiniGridSyncState()
@@ -517,8 +597,7 @@ MiniGridSyncState() {
             MiniGridArmed := true
             MiniGridSubscribed := true
             if !SessionLocked {
-                ToolTip("Numpad grid armed (secondary connected)")
-                SetTimer(() => ToolTip(), -2000)
+                Notify("Numpad grid armed (secondary connected)", 2000)
             }
         }
     } else if !shouldBeActive && MiniGridSubscribed {
@@ -526,8 +605,7 @@ MiniGridSyncState() {
         MiniGridArmed := false
         MiniGridSubscribed := false
         if !SessionLocked {
-            ToolTip("Numpad grid disabled (secondary removed)")
-            SetTimer(() => ToolTip(), -2000)
+            Notify("Numpad grid disabled (secondary removed)", 2000)
         }
     }
 }
@@ -551,8 +629,7 @@ MiniGridSubscribe() {
             try {
                 MiniGridAHI.SubscribeKey(kbId, code, 1, MiniGridDispatch.Bind(k))
             } catch as err {
-                ToolTip("Numpad grid subscribe failed (" err.Message ")")
-                SetTimer(() => ToolTip(), -3000)
+                Notify("Numpad grid subscribe failed (" err.Message ")", 3000)
                 return false
             }
         }
@@ -585,8 +662,7 @@ MiniGridDispatch(K, state) {
         return
     if K = 10 {              ; layer switch
         MiniGridLayer := !MiniGridLayer
-        ToolTip("Numpad grid layer: L" (MiniGridLayer ? "2" : "1"))
-        SetTimer(() => ToolTip(), -1500)
+        Notify("Numpad grid layer: L" (MiniGridLayer ? "2" : "1"), 1500)
     } else {
         ; Reuse DispatchMacro with a synthesized layer-aware grid command, so the
         ; numpad drives the exact same actions as the hardware ButtonGrid.
@@ -604,23 +680,22 @@ MiniGridDispatch(K, state) {
         return
     }
 
-    fileContent := FileRead(TERMINAL_SETTINGS_PATH)
-
-    if InStr(fileContent, '"opacity": ' OPACITY_HIGH) {
-        fileContent := StrReplace(fileContent, '"opacity": ' OPACITY_HIGH, '"opacity": ' OPACITY_LOW)
-    } else if InStr(fileContent, '"opacity": ' OPACITY_LOW) {
-        fileContent := StrReplace(fileContent, '"opacity": ' OPACITY_LOW, '"opacity": ' OPACITY_HIGH)
-    } else {
-        fileContent := RegExReplace(fileContent, '"opacity":\s*\d+', '"opacity": ' OPACITY_HIGH)
-    }
-
     try {
+        fileContent := FileRead(TERMINAL_SETTINGS_PATH)
+
+        if RegExMatch(fileContent, '"opacity":\s*' . OPACITY_HIGH) {
+            fileContent := RegExReplace(fileContent, '"opacity":\s*' . OPACITY_HIGH, '"opacity": ' . OPACITY_LOW)
+        } else if RegExMatch(fileContent, '"opacity":\s*' . OPACITY_LOW) {
+            fileContent := RegExReplace(fileContent, '"opacity":\s*' . OPACITY_LOW, '"opacity": ' . OPACITY_HIGH)
+        } else {
+            fileContent := RegExReplace(fileContent, '"opacity":\s*\d+', '"opacity": ' . OPACITY_HIGH)
+        }
+
         FileObj := FileOpen(TERMINAL_SETTINGS_PATH, "w", "UTF-8")
         FileObj.Write(fileContent)
         FileObj.Close()
     } catch as err {
-        ToolTip("Failed to write Terminal settings: " err.Message)
-        SetTimer(() => ToolTip(), -3000)
+        Notify("Failed to write Terminal settings: " . err.Message, 3000)
     }
 }
 #HotIf  ; ── end context ──
@@ -658,14 +733,6 @@ ResizeTerminal(hwnd := 0) {
         return
     WinMove(TERMINAL_OFFSET_X, TERMINAL_OFFSET_Y,
         A_ScreenWidth * TERMINAL_WIDTH_PCT - 3, A_ScreenHeight * TERMINAL_HEIGHT_PCT + 2, "ahk_id " hwnd)
-}
-
-; Run a program at user (non-elevated) integrity level via the desktop shell.
-; Source: AutoHotkeyUX/inc/ShellRun.ahk (Lexikos), AHK v2 port.
-ShellRun(filePath, arguments?, directory?, operation?, show?) {
-    static VT_UI4 := 0x13, SWC_DESKTOP := ComValue(VT_UI4, 0x8)
-    ComObject("Shell.Application").Windows.Item(SWC_DESKTOP).Document.Application
-        .ShellExecute(filePath, arguments?, directory?, operation?, show?)
 }
 
 ; Bring `hwnd` to the foreground, working around the Windows foreground-lock.
@@ -712,6 +779,23 @@ ForceFocus(hwnd) {
     }
 }
 
+; Find a newly spawned window matching `criteria` that was not in `beforeList`,
+; or fall back to the first existing window in `beforeList`.
+FindTargetWindow(criteria, beforeList) {
+    for w in WinGetList(criteria) {
+        wasOpen := false
+        for b in beforeList {
+            if (w = b) {
+                wasOpen := true
+                break
+            }
+        }
+        if !wasOpen
+            return w ; Brand-new window
+    }
+    return (beforeList.Length > 0 ? beforeList[1] : 0)
+}
+
 ; Launch an app de-elevated via the desktop shell, wait for its window, and
 ; force it to the foreground. exeName defaults to the launch file's name; pass
 ; it explicitly when the real window belongs to a different process.
@@ -727,23 +811,7 @@ LaunchAndFocus(filePath, arguments?, exeName := "") {
 
     Sleep(300)  ; let the window finish materializing before activating
 
-    target := 0
-    for w in WinGetList("ahk_exe " exeName) {
-        wasOpen := false
-        for b in before {
-            if w = b {
-                wasOpen := true
-                break
-            }
-        }
-        if !wasOpen {
-            target := w            ; a brand-new window was created
-            break
-        }
-    }
-    if !target && before.Length > 0
-        target := before[1]        ; single-instance app → activate existing window
-
+    target := FindTargetWindow("ahk_exe " exeName, before)
     if target && ForceFocus(target)
         return true
 
@@ -756,17 +824,6 @@ LaunchAndFocus(filePath, arguments?, exeName := "") {
     return false
 }
 
-; Expand a leading "~" (pwsh-style home) to the user profile directory.
-; Accepts "~/path", "~\" or bare "~". Other input is returned unchanged.
-; Forward slashes from "~/path" are normalized to backslashes for Windows.
-ExpandTilde(path) {
-    if path = "~"
-        return EnvGet("USERPROFILE")
-    if RegExMatch(path, '^~[\\/]')
-        return StrReplace(EnvGet("USERPROFILE") . SubStr(path, 2), "/", "\")
-    return path
-}
-
 ; Launch opencode in Windows Terminal at the given directory, then size the
 ; terminal window to the same dimensions Win+F1 uses.
 ; wt.exe is launched de-elevated so it can attach to existing (non-elevated)
@@ -775,35 +832,54 @@ LaunchOpencode(dir) {
     ; A trailing "\" would be eaten by the closing quote of the wt -d argument
     ; (CommandLineToArgvW turns `"C:\path\"` into `C:\path"`), so drop it first.
     dir := RegExReplace(dir, '(?<!:)[\\/]+$')
-    wtPath := EnvGet("LOCALAPPDATA") . "\Microsoft\WindowsApps\wt.exe"
     before := WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS")
 
-    ShellRun(wtPath, '-d "' dir '" pwsh.exe -NoExit -Command "opencode"')
+    ShellRun(APP_WT, '-d "' dir '" pwsh.exe -NoExit -Command "opencode"')
 
     if WinWait("ahk_class CASCADIA_HOSTING_WINDOW_CLASS", , 5) {
         Sleep(400)
-        target := 0
-        for w in WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS") {
-            wasOpen := false
-            for b in before {
-                if b = w {
-                    wasOpen := true
-                    break
-                }
-            }
-            if !wasOpen {
-                target := w          ; a brand-new window was created
-                break
-            }
-        }
-        if !target && before.Length > 0
-            target := before[1]      ; tab landed in existing topmost window
+        target := FindTargetWindow("ahk_class CASCADIA_HOSTING_WINDOW_CLASS", before)
 
         if target {
             ForceFocus(target)
             ResizeTerminal(target)
         }
     }
+}
+
+; Query MONITORINFO for the monitor containing `hwnd`.
+GetMonitorInfoForWindow(hwnd, &mi) {
+    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
+    if !hMon
+        return false
+
+    mi := Buffer(40)                           ; MONITORINFO
+    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
+    return DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
+}
+
+; Get the work area of the monitor containing `hwnd` (nearest if off-screen).
+MonitorWorkArea(hwnd, &left, &top, &right, &bottom) {
+    if !GetMonitorInfoForWindow(hwnd, &mi)
+        return false
+
+    left   := NumGet(mi, 20, "Int")            ; rcWork.left
+    top    := NumGet(mi, 24, "Int")            ; rcWork.top
+    right  := NumGet(mi, 28, "Int")            ; rcWork.right
+    bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
+    return true
+}
+
+; True if the monitor containing `hwnd` has the given physical resolution
+; (rcMonitor, not rcWork — unaffected by DPI scaling / taskbar placement).
+MonitorPhysicalSize(hwnd, width, height) {
+    if !GetMonitorInfoForWindow(hwnd, &mi)
+        return false
+
+    ; MONITORINFO: cbSize(0) | rcMonitor l,t,r,b (4,8,12,16) | rcWork l,t,r,b (20,24,28,32)
+    monWidth  := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")    ; rcMonitor.right - rcMonitor.left
+    monHeight := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")    ; rcMonitor.bottom - rcMonitor.top
+    return (monWidth = width && monHeight = height)
 }
 
 ; Win+F1: Snap Task Manager to the right 58% of whichever monitor it's on.
@@ -814,8 +890,13 @@ LaunchOpencode(dir) {
     activeHWnd := WinExist("A")
 
     try {
-        if !MonitorWorkArea(activeHWnd, &left, &top, &right, &bottom)
+        if !GetMonitorInfoForWindow(activeHWnd, &mi)
             throw
+
+        left   := NumGet(mi, 20, "Int")            ; rcWork.left
+        top    := NumGet(mi, 24, "Int")            ; rcWork.top
+        right  := NumGet(mi, 28, "Int")            ; rcWork.right
+        bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
 
         monitorWidth  := right - left
         monitorHeight := bottom - top
@@ -823,8 +904,11 @@ LaunchOpencode(dir) {
         targetWidth  := monitorWidth * TASKMANAGER_WIDTH_PCT
         targetHeight := monitorHeight + 9
 
-        if MonitorPhysicalSize(activeHWnd, 1920, 1080) {
-            ; 1920x1080 screen: flush top-right, 40% width, 50% height, nudged 5px toward the right
+        monPhysW := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")
+        monPhysH := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")
+
+        if (monPhysW = 1920 && monPhysH = 1080) {
+            ; 1920x1080 screen: flush top-right, 41% width, 50% height, nudged 9px toward the right
             targetWidth  := monitorWidth * TASKMANAGER_1080P_WIDTH_PCT
             targetHeight := monitorHeight * TASKMANAGER_1080P_HEIGHT_PCT
             targetX := right - targetWidth + TASKMANAGER_1080P_X_OFFSET
@@ -837,8 +921,7 @@ LaunchOpencode(dir) {
 
         WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
     } catch {
-        ToolTip("Failed to detect the Task Manager's monitor.")
-        SetTimer(() => ToolTip(), -2000)
+        Notify("Failed to detect the Task Manager's monitor.", 2000)
     }
 }
 #HotIf  ; ── end context ──
@@ -866,8 +949,7 @@ LaunchOpencode(dir) {
             WinMove(left + EDGE_X_OFFSET + EDGE_POS_X_OFFSET,
                 top + EDGE_POS_Y_OFFSET, width, height, activeHwnd)
         } else {
-            ToolTip("Failed to detect monitor.")
-            SetTimer(() => ToolTip(), -2000)
+            Notify("Failed to detect monitor.", 2000)
         }
     } catch {
     }
@@ -876,49 +958,10 @@ LaunchOpencode(dir) {
 }
 #HotIf  ; ── end context ──
 
-; Get the work area of the monitor containing `hwnd` (nearest if off-screen).
-; AHK v2 has no built-in window→monitor helper; MonitorGetWorkArea only takes a
-; monitor number, so resolve the monitor via MonitorFromWindow + GetMonitorInfo.
-MonitorWorkArea(hwnd, &left, &top, &right, &bottom) {
-    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
-    if !hMon
-        return false
-
-    mi := Buffer(40)                           ; MONITORINFO
-    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
-    if !DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
-        return false
-
-    left   := NumGet(mi, 20, "Int")            ; rcWork.left
-    top    := NumGet(mi, 24, "Int")            ; rcWork.top
-    right  := NumGet(mi, 28, "Int")            ; rcWork.right
-    bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
-    return true
-}
-
-; True if the monitor containing `hwnd` has the given physical resolution
-; (rcMonitor, not rcWork — unaffected by DPI scaling / taskbar placement).
-MonitorPhysicalSize(hwnd, width, height) {
-    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
-    if !hMon
-        return false
-
-    mi := Buffer(40)                           ; MONITORINFO
-    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
-    if !DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
-        return false
-
-    ; MONITORINFO: cbSize(0) | rcMonitor l,t,r,b (4,8,12,16) | rcWork l,t,r,b (20,24,28,32)
-    monWidth  := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")    ; rcMonitor.right - rcMonitor.left
-    monHeight := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")    ; rcMonitor.bottom - rcMonitor.top
-    return (monWidth = width && monHeight = height)
-}
-
 ; Win+F1 fallback: swallow everywhere else so Windows Help never opens.
 ; The context variants above take precedence when their #HotIf matches.
 #F1:: {
-    ToolTip("Win+F1 — no action")
-    SetTimer(() => ToolTip(), -500)
+    Notify("Win+F1 — no action", 500)
 }
 
 ; ═══ DEBUG TOOLS ══════════════════════════════════════════════════════════════
@@ -927,8 +970,7 @@ MonitorPhysicalSize(hwnd, width, height) {
 ^!+#.:: {
     activeHWnd := WinExist("A")
     if !activeHWnd {
-        ToolTip("No active window detected.")
-        SetTimer(() => ToolTip(), -2000)
+        Notify("No active window detected.", 2000)
         return
     }
 

@@ -1,4 +1,4 @@
-#include "C:\Users\Leonardo\001\00__DEV\zz - VAR\AutoHotkey\lib\numpad_grid\CLR.ahk"
+#include "%A_ScriptDir%\lib\numpad_grid\CLR.ahk"
 
 class AutoHotInterception {
 	_contextManagers := Map()
@@ -21,16 +21,14 @@ class AutoHotInterception {
 			dllFile := A_LineFile "\..\" bitness "\" dllName
 		}
 		if (!FileExist(dllFile)) {
-			MsgBox("Unable to find " dllFile ", exiting...`nYou should extract both x86 and x64 folders from the library folder in interception.zip into AHI's lib folder.")
-			ExitApp
+			throw Error("Unable to find " dllFile ". You should extract both x86 and x64 folders from the library folder in interception.zip into AHI's lib folder.")
 		}
 
 		hModule := DllCall("LoadLibrary", "Str", dllFile, "Ptr")
 		if (hModule == 0) {
 			this_bitness := A_PtrSize == 8 ? "64-bit" : "32-bit"
 			other_bitness := A_PtrSize == 4 ? "64-bit" : "32-bit"
-			MsgBox("Bitness of " dllName " does not match bitness of AHK.`nAHK is " this_bitness ", but " dllName " is " other_bitness ".")
-			ExitApp
+			throw Error("Bitness of " dllName " does not match bitness of AHK. AHK is " this_bitness ", but " dllName " is " other_bitness ".")
 		}
 		DllCall("FreeLibrary", "Ptr", hModule)
 
@@ -42,8 +40,7 @@ class AutoHotInterception {
 		}
 		hintMessage := "Try right-clicking " dllFile ", select Properties, and if there is an 'Unblock' checkbox, tick it`nAlternatively, running Unblocker.ps1 in the lib folder (ideally as admin) can do this for you."
 		if (!FileExist(dllFile)) {
-			MsgBox("Unable to find " dllFile ", exiting...")
-			ExitApp
+			throw Error("Unable to find " dllFile)
 		}
 
 		asm := CLR_LoadLibrary(dllFile)
@@ -51,12 +48,10 @@ class AutoHotInterception {
 			this.Instance := asm.CreateInstance("AutoHotInterception.Manager")
 		}
 		catch {
-			MsgBox(dllName " failed to load`n`n" hintMessage)
-			ExitApp
+			throw Error(dllName " failed to load`n`n" hintMessage)
 		}
 		if (this.Instance.OkCheck() != "OK") {
-			MsgBox(dllName " loaded but check failed!`n`n" hintMessage)
-			ExitApp
+			throw Error(dllName " loaded but check failed!`n`n" hintMessage)
 		}
 	}
 
@@ -123,8 +118,7 @@ class AutoHotInterception {
 		static devType := Map(0, "Keyboard", 1, "Mouse")
 		dev := this.Instance.GetDeviceId(IsMouse, VID, PID, instance)
 		if (dev == 0) {
-			MsgBox("Could not get " devType[isMouse] " with VID " VID ", PID " PID ", Instance " instance)
-			ExitApp
+			throw Error("Could not get " devType[isMouse] " with VID " VID ", PID " PID ", Instance " instance)
 		}
 		return dev
 	}
@@ -133,8 +127,7 @@ class AutoHotInterception {
 		static devType := Map(0, "Keyboard", 1, "Mouse")
 		dev := this.Instance.GetDeviceIdFromHandle(IsMouse, handle, instance)
 		if (dev == 0) {
-			MsgBox("Could not get " devType[isMouse] " with Handle " handle ", Instance " instance)
-			ExitApp
+			throw Error("Could not get " devType[isMouse] " with Handle " handle ", Instance " instance)
 		}
 		return dev
 	}
@@ -226,8 +219,7 @@ class AutoHotInterception {
 	; Creates a context class to make it easy to turn on/off the hotkeys
 	CreateContextManager(id) {
 		if (this._contextManagers.Has(id)) {
-			Msgbox("ID " id " already has a Context Manager")
-			ExitApp
+			throw Error("ID " id " already has a Context Manager")
 		}
 		cm := AutoHotInterception.ContextManager(this, id)
 		this._contextManagers[id] := cm
@@ -236,8 +228,7 @@ class AutoHotInterception {
 
 	RemoveContextManager(id) {
 		if (!this._contextManagers.Has(id)) {
-			Msgbox("ID " id " does not have a Context Manager")
-			ExitApp
+			throw Error("ID " id " does not have a Context Manager")
 		}
 		this._contextManagers[id].Remove()
 		this._contextManagers.Delete(id)

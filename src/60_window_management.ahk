@@ -34,14 +34,6 @@ ResizeTerminal(hwnd := 0) {
         A_ScreenWidth * TERMINAL_WIDTH_PCT - 3, A_ScreenHeight * TERMINAL_HEIGHT_PCT + 2, "ahk_id " hwnd)
 }
 
-; Run a program at user (non-elevated) integrity level via the desktop shell.
-; Source: AutoHotkeyUX/inc/ShellRun.ahk (Lexikos), AHK v2 port.
-ShellRun(filePath, arguments?, directory?, operation?, show?) {
-    static VT_UI4 := 0x13, SWC_DESKTOP := ComValue(VT_UI4, 0x8)
-    ComObject("Shell.Application").Windows.Item(SWC_DESKTOP).Document.Application
-        .ShellExecute(filePath, arguments?, directory?, operation?, show?)
-}
-
 ; Bring `hwnd` to the foreground, working around the Windows foreground-lock.
 ; A plain WinActivate is denied when the script isn't the foreground process and
 ; has no recent user input — the serial button grid is timer-driven, so the OS
@@ -86,6 +78,23 @@ ForceFocus(hwnd) {
     }
 }
 
+; Find a newly spawned window matching `criteria` that was not in `beforeList`,
+; or fall back to the first existing window in `beforeList`.
+FindTargetWindow(criteria, beforeList) {
+    for w in WinGetList(criteria) {
+        wasOpen := false
+        for b in beforeList {
+            if (w = b) {
+                wasOpen := true
+                break
+            }
+        }
+        if !wasOpen
+            return w ; Brand-new window
+    }
+    return (beforeList.Length > 0 ? beforeList[1] : 0)
+}
+
 ; Launch an app de-elevated via the desktop shell, wait for its window, and
 ; force it to the foreground. exeName defaults to the launch file's name; pass
 ; it explicitly when the real window belongs to a different process.
@@ -101,23 +110,7 @@ LaunchAndFocus(filePath, arguments?, exeName := "") {
 
     Sleep(300)  ; let the window finish materializing before activating
 
-    target := 0
-    for w in WinGetList("ahk_exe " exeName) {
-        wasOpen := false
-        for b in before {
-            if w = b {
-                wasOpen := true
-                break
-            }
-        }
-        if !wasOpen {
-            target := w            ; a brand-new window was created
-            break
-        }
-    }
-    if !target && before.Length > 0
-        target := before[1]        ; single-instance app → activate existing window
-
+    target := FindTargetWindow("ahk_exe " exeName, before)
     if target && ForceFocus(target)
         return true
 
@@ -130,17 +123,6 @@ LaunchAndFocus(filePath, arguments?, exeName := "") {
     return false
 }
 
-; Expand a leading "~" (pwsh-style home) to the user profile directory.
-; Accepts "~/path", "~\" or bare "~". Other input is returned unchanged.
-; Forward slashes from "~/path" are normalized to backslashes for Windows.
-ExpandTilde(path) {
-    if path = "~"
-        return EnvGet("USERPROFILE")
-    if RegExMatch(path, '^~[\\/]')
-        return StrReplace(EnvGet("USERPROFILE") . SubStr(path, 2), "/", "\")
-    return path
-}
-
 ; Launch opencode in Windows Terminal at the given directory, then size the
 ; terminal window to the same dimensions Win+F1 uses.
 ; wt.exe is launched de-elevated so it can attach to existing (non-elevated)
@@ -149,35 +131,54 @@ LaunchOpencode(dir) {
     ; A trailing "\" would be eaten by the closing quote of the wt -d argument
     ; (CommandLineToArgvW turns `"C:\path\"` into `C:\path"`), so drop it first.
     dir := RegExReplace(dir, '(?<!:)[\\/]+$')
-    wtPath := EnvGet("LOCALAPPDATA") . "\Microsoft\WindowsApps\wt.exe"
     before := WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS")
 
-    ShellRun(wtPath, '-d "' dir '" pwsh.exe -NoExit -Command "opencode"')
+    ShellRun(APP_WT, '-d "' dir '" pwsh.exe -NoExit -Command "opencode"')
 
     if WinWait("ahk_class CASCADIA_HOSTING_WINDOW_CLASS", , 5) {
         Sleep(400)
-        target := 0
-        for w in WinGetList("ahk_class CASCADIA_HOSTING_WINDOW_CLASS") {
-            wasOpen := false
-            for b in before {
-                if b = w {
-                    wasOpen := true
-                    break
-                }
-            }
-            if !wasOpen {
-                target := w          ; a brand-new window was created
-                break
-            }
-        }
-        if !target && before.Length > 0
-            target := before[1]      ; tab landed in existing topmost window
+        target := FindTargetWindow("ahk_class CASCADIA_HOSTING_WINDOW_CLASS", before)
 
         if target {
             ForceFocus(target)
             ResizeTerminal(target)
         }
     }
+}
+
+; Query MONITORINFO for the monitor containing `hwnd`.
+GetMonitorInfoForWindow(hwnd, &mi) {
+    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
+    if !hMon
+        return false
+
+    mi := Buffer(40)                           ; MONITORINFO
+    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
+    return DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
+}
+
+; Get the work area of the monitor containing `hwnd` (nearest if off-screen).
+MonitorWorkArea(hwnd, &left, &top, &right, &bottom) {
+    if !GetMonitorInfoForWindow(hwnd, &mi)
+        return false
+
+    left   := NumGet(mi, 20, "Int")            ; rcWork.left
+    top    := NumGet(mi, 24, "Int")            ; rcWork.top
+    right  := NumGet(mi, 28, "Int")            ; rcWork.right
+    bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
+    return true
+}
+
+; True if the monitor containing `hwnd` has the given physical resolution
+; (rcMonitor, not rcWork — unaffected by DPI scaling / taskbar placement).
+MonitorPhysicalSize(hwnd, width, height) {
+    if !GetMonitorInfoForWindow(hwnd, &mi)
+        return false
+
+    ; MONITORINFO: cbSize(0) | rcMonitor l,t,r,b (4,8,12,16) | rcWork l,t,r,b (20,24,28,32)
+    monWidth  := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")    ; rcMonitor.right - rcMonitor.left
+    monHeight := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")    ; rcMonitor.bottom - rcMonitor.top
+    return (monWidth = width && monHeight = height)
 }
 
 ; Win+F1: Snap Task Manager to the right 58% of whichever monitor it's on.
@@ -188,8 +189,13 @@ LaunchOpencode(dir) {
     activeHWnd := WinExist("A")
 
     try {
-        if !MonitorWorkArea(activeHWnd, &left, &top, &right, &bottom)
+        if !GetMonitorInfoForWindow(activeHWnd, &mi)
             throw
+
+        left   := NumGet(mi, 20, "Int")            ; rcWork.left
+        top    := NumGet(mi, 24, "Int")            ; rcWork.top
+        right  := NumGet(mi, 28, "Int")            ; rcWork.right
+        bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
 
         monitorWidth  := right - left
         monitorHeight := bottom - top
@@ -197,8 +203,11 @@ LaunchOpencode(dir) {
         targetWidth  := monitorWidth * TASKMANAGER_WIDTH_PCT
         targetHeight := monitorHeight + 9
 
-        if MonitorPhysicalSize(activeHWnd, 1920, 1080) {
-            ; 1920x1080 screen: flush top-right, 40% width, 50% height, nudged 5px toward the right
+        monPhysW := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")
+        monPhysH := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")
+
+        if (monPhysW = 1920 && monPhysH = 1080) {
+            ; 1920x1080 screen: flush top-right, 41% width, 50% height, nudged 9px toward the right
             targetWidth  := monitorWidth * TASKMANAGER_1080P_WIDTH_PCT
             targetHeight := monitorHeight * TASKMANAGER_1080P_HEIGHT_PCT
             targetX := right - targetWidth + TASKMANAGER_1080P_X_OFFSET
@@ -211,8 +220,7 @@ LaunchOpencode(dir) {
 
         WinMove(targetX, targetY, targetWidth, targetHeight, activeHWnd)
     } catch {
-        ToolTip("Failed to detect the Task Manager's monitor.")
-        SetTimer(() => ToolTip(), -2000)
+        Notify("Failed to detect the Task Manager's monitor.", 2000)
     }
 }
 #HotIf  ; ── end context ──
@@ -240,8 +248,7 @@ LaunchOpencode(dir) {
             WinMove(left + EDGE_X_OFFSET + EDGE_POS_X_OFFSET,
                 top + EDGE_POS_Y_OFFSET, width, height, activeHwnd)
         } else {
-            ToolTip("Failed to detect monitor.")
-            SetTimer(() => ToolTip(), -2000)
+            Notify("Failed to detect monitor.", 2000)
         }
     } catch {
     }
@@ -250,47 +257,8 @@ LaunchOpencode(dir) {
 }
 #HotIf  ; ── end context ──
 
-; Get the work area of the monitor containing `hwnd` (nearest if off-screen).
-; AHK v2 has no built-in window→monitor helper; MonitorGetWorkArea only takes a
-; monitor number, so resolve the monitor via MonitorFromWindow + GetMonitorInfo.
-MonitorWorkArea(hwnd, &left, &top, &right, &bottom) {
-    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
-    if !hMon
-        return false
-
-    mi := Buffer(40)                           ; MONITORINFO
-    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
-    if !DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
-        return false
-
-    left   := NumGet(mi, 20, "Int")            ; rcWork.left
-    top    := NumGet(mi, 24, "Int")            ; rcWork.top
-    right  := NumGet(mi, 28, "Int")            ; rcWork.right
-    bottom := NumGet(mi, 32, "Int")            ; rcWork.bottom
-    return true
-}
-
-; True if the monitor containing `hwnd` has the given physical resolution
-; (rcMonitor, not rcWork — unaffected by DPI scaling / taskbar placement).
-MonitorPhysicalSize(hwnd, width, height) {
-    hMon := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0x2, "Ptr") ; MONITOR_DEFAULTTONEAREST
-    if !hMon
-        return false
-
-    mi := Buffer(40)                           ; MONITORINFO
-    NumPut("UInt", mi.Size, mi, 0)             ; cbSize
-    if !DllCall("GetMonitorInfo", "Ptr", hMon, "Ptr", mi)
-        return false
-
-    ; MONITORINFO: cbSize(0) | rcMonitor l,t,r,b (4,8,12,16) | rcWork l,t,r,b (20,24,28,32)
-    monWidth  := NumGet(mi, 12, "Int") - NumGet(mi, 4, "Int")    ; rcMonitor.right - rcMonitor.left
-    monHeight := NumGet(mi, 16, "Int") - NumGet(mi, 8, "Int")    ; rcMonitor.bottom - rcMonitor.top
-    return (monWidth = width && monHeight = height)
-}
-
 ; Win+F1 fallback: swallow everywhere else so Windows Help never opens.
 ; The context variants above take precedence when their #HotIf matches.
 #F1:: {
-    ToolTip("Win+F1 — no action")
-    SetTimer(() => ToolTip(), -500)
+    Notify("Win+F1 — no action", 500)
 }

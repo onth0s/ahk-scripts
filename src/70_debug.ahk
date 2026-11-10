@@ -5,8 +5,7 @@
 ^!+#.:: {
     activeHWnd := WinExist("A")
     if !activeHWnd {
-        ToolTip("No active window detected.")
-        SetTimer(() => ToolTip(), -2000)
+        Notify("No active window detected.", 2000)
         return
     }
 

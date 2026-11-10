@@ -1,6 +1,20 @@
 ; ═══ CONFIGURATION ════════════════════════════════════════════════════════════
 ; Tunable values — edit these to adjust behavior without touching logic.
 
+; Hardware serial button grid
+ComPort  := "COM5"   ; Nano COM port
+BaudRate := 9600
+
+; External applications & paths
+DIR_DOWNLOADS := "C:\Users\Leonardo\Downloads"
+APP_SUBLIME   := 'C:\Program Files\Sublime Text\sublime.exe'
+APP_KRITA     := 'C:\Program Files\Krita (x64)\bin\krita.exe'
+APP_BLENDER   := 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
+APP_TELEGRAM  := 'C:\Users\Leonardo\AppData\Roaming\Telegram Desktop\Telegram.exe'
+APP_BEEREF    := 'C:\Users\Leonardo\001\00__DEV\BeeRef\.venv\Scripts\beeref.exe'
+APP_WT        := EnvGet("LOCALAPPDATA") . "\Microsoft\WindowsApps\wt.exe"
+APP_EXPLORER  := 'C:\Windows\explorer.exe'
+
 ; Terminal opacity toggle
 OPACITY_HIGH := 90
 OPACITY_LOW  := 65
@@ -42,3 +56,14 @@ SETTINGS_H := 700
 ; Win+F1: Reposition Dimmer
 DIMMER_X := 7
 DIMMER_Y := 709
+
+; Numpad grid (AutoHotInterception)
+NUMGRID_SECONDARY_VID := 0x248A
+NUMGRID_SECONDARY_PID := 0x8367
+; Default keyboard: ACPI embedded keyboard. Resolved by handle (ids can shift
+; across reboots). List extra candidate handles if the physical keyboard spans
+; more than one HID collection.
+NUMGRID_DEFAULT_HANDLES := [
+    "ACPI\VEN_MSNB&DEV_1001",
+]
+NUMGRID_POLL_MS := 2000

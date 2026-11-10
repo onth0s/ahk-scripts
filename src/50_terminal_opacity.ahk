@@ -9,23 +9,22 @@
         return
     }
 
-    fileContent := FileRead(TERMINAL_SETTINGS_PATH)
-
-    if InStr(fileContent, '"opacity": ' OPACITY_HIGH) {
-        fileContent := StrReplace(fileContent, '"opacity": ' OPACITY_HIGH, '"opacity": ' OPACITY_LOW)
-    } else if InStr(fileContent, '"opacity": ' OPACITY_LOW) {
-        fileContent := StrReplace(fileContent, '"opacity": ' OPACITY_LOW, '"opacity": ' OPACITY_HIGH)
-    } else {
-        fileContent := RegExReplace(fileContent, '"opacity":\s*\d+', '"opacity": ' OPACITY_HIGH)
-    }
-
     try {
+        fileContent := FileRead(TERMINAL_SETTINGS_PATH)
+
+        if RegExMatch(fileContent, '"opacity":\s*' . OPACITY_HIGH) {
+            fileContent := RegExReplace(fileContent, '"opacity":\s*' . OPACITY_HIGH, '"opacity": ' . OPACITY_LOW)
+        } else if RegExMatch(fileContent, '"opacity":\s*' . OPACITY_LOW) {
+            fileContent := RegExReplace(fileContent, '"opacity":\s*' . OPACITY_LOW, '"opacity": ' . OPACITY_HIGH)
+        } else {
+            fileContent := RegExReplace(fileContent, '"opacity":\s*\d+', '"opacity": ' . OPACITY_HIGH)
+        }
+
         FileObj := FileOpen(TERMINAL_SETTINGS_PATH, "w", "UTF-8")
         FileObj.Write(fileContent)
         FileObj.Close()
     } catch as err {
-        ToolTip("Failed to write Terminal settings: " err.Message)
-        SetTimer(() => ToolTip(), -3000)
+        Notify("Failed to write Terminal settings: " . err.Message, 3000)
     }
 }
 #HotIf  ; ── end context ──

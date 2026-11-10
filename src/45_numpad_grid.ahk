@@ -14,18 +14,7 @@
 ;   BloqNum -> K3  9 -> K6   6 -> K9   3 -> K12
 ;   / * 0 Enter are NOT mapped and keep normal behavior.
 
-#Include "C:\Users\Leonardo\001\00__DEV\zz - VAR\AutoHotkey\lib\numpad_grid\AutoHotInterception.ahk"
-
-; ── Config ─────────────────────────────────────────────────────────────────────
-NUMGRID_SECONDARY_VID := 0x248A
-NUMGRID_SECONDARY_PID := 0x8367
-; Default keyboard: ACPI embedded keyboard. Resolved by handle (ids can shift
-; across reboots). List extra candidate handles if the physical keyboard spans
-; more than one HID collection.
-NUMGRID_DEFAULT_HANDLES := [
-    "ACPI\VEN_MSNB&DEV_1001",
-]
-NUMGRID_POLL_MS := 2000
+#Include "%A_ScriptDir%\lib\numpad_grid\AutoHotInterception.ahk"
 
 ; scan code -> K number (10 = layer switch)
 NUMGRID_MAP := Map(
@@ -44,10 +33,10 @@ NUMGRID_MAP := Map(
 )
 
 ; ── State ──────────────────────────────────────────────────────────────────────
-MiniGridLayer     := 0          ; 0 = L1, 1 = L2
-MiniGridArmed     := false      ; secondary present AND subscribed
-MiniGridSubscribed:= false
-MiniGridIds       := []         ; resolved AHI ids for the default keyboard
+MiniGridLayer      := 0          ; 0 = L1, 1 = L2
+MiniGridArmed      := false      ; secondary present AND subscribed
+MiniGridSubscribed := false
+MiniGridIds        := []         ; resolved AHI ids for the default keyboard
 
 ; ═══════════════════════════════════════════════════════════════════════════════
 ; ═══ INIT ═════════════════════════════════════════════════════════════════════
@@ -57,28 +46,34 @@ try {
     MiniGridAHI := AutoHotInterception()
 } catch as err {
     MiniGridAHI := 0
-    ToolTip("AutoHotInterception unavailable — numpad grid disabled (" err.Message ")")
-    SetTimer(() => ToolTip(), -3000)
+    Notify("AutoHotInterception unavailable — numpad grid disabled (" err.Message ")", 3000)
 }
 
 if MiniGridAHI {
     ; Resolve default keyboard ids from the device list by handle.
-    devs := MiniGridAHI.GetDeviceList()
-    for id, d in devs {
-        if d.IsMouse
-            continue
-        for h in NUMGRID_DEFAULT_HANDLES {
-            if (d.Handle = h)
-                MiniGridIds.Push(id)
+    try {
+        devs := MiniGridAHI.GetDeviceList()
+        for id, d in devs {
+            if d.IsMouse
+                continue
+            for h in NUMGRID_DEFAULT_HANDLES {
+                if (d.Handle = h)
+                    MiniGridIds.Push(id)
+            }
         }
+    } catch {
+        MiniGridIds := []
     }
+
     if MiniGridIds.Length = 0 {
-        ToolTip("Numpad grid: default keyboard handle not found — grid disabled")
-        SetTimer(() => ToolTip(), -3000)
+        Notify("Numpad grid: default keyboard handle not found — grid disabled", 3000)
         MiniGridAHI := 0
     } else {
         SessionLockCallbacks.Push((*) => MiniGridSyncState())
-        SetTimer CheckMiniGridSecondary, NUMGRID_POLL_MS
+        ; Listen for USB plug/unplug events
+        OnMessage(0x0219, OnMiniGridDeviceChange)
+        ; Background safety poll (every 5 seconds)
+        SetTimer CheckMiniGridSecondary, 5000
         MiniGridSyncState()   ; initial sync
     }
 }
@@ -86,6 +81,12 @@ if MiniGridAHI {
 ; ═══════════════════════════════════════════════════════════════════════════════
 ; ═══ WATCHDOG: arm/disable on secondary keyboard connect or session lock/unlock 
 ; ═══════════════════════════════════════════════════════════════════════════════
+
+OnMiniGridDeviceChange(wParam, lParam, msg, hwnd) {
+    ; DBT_DEVNODES_CHANGED = 0x0007
+    if (wParam = 7)
+        SetTimer(MiniGridSyncState, -200) ; debounced sync
+}
 
 CheckMiniGridSecondary() {
     MiniGridSyncState()
@@ -101,8 +102,7 @@ MiniGridSyncState() {
             MiniGridArmed := true
             MiniGridSubscribed := true
             if !SessionLocked {
-                ToolTip("Numpad grid armed (secondary connected)")
-                SetTimer(() => ToolTip(), -2000)
+                Notify("Numpad grid armed (secondary connected)", 2000)
             }
         }
     } else if !shouldBeActive && MiniGridSubscribed {
@@ -110,8 +110,7 @@ MiniGridSyncState() {
         MiniGridArmed := false
         MiniGridSubscribed := false
         if !SessionLocked {
-            ToolTip("Numpad grid disabled (secondary removed)")
-            SetTimer(() => ToolTip(), -2000)
+            Notify("Numpad grid disabled (secondary removed)", 2000)
         }
     }
 }
@@ -135,8 +134,7 @@ MiniGridSubscribe() {
             try {
                 MiniGridAHI.SubscribeKey(kbId, code, 1, MiniGridDispatch.Bind(k))
             } catch as err {
-                ToolTip("Numpad grid subscribe failed (" err.Message ")")
-                SetTimer(() => ToolTip(), -3000)
+                Notify("Numpad grid subscribe failed (" err.Message ")", 3000)
                 return false
             }
         }
@@ -169,8 +167,7 @@ MiniGridDispatch(K, state) {
         return
     if K = 10 {              ; layer switch
         MiniGridLayer := !MiniGridLayer
-        ToolTip("Numpad grid layer: L" (MiniGridLayer ? "2" : "1"))
-        SetTimer(() => ToolTip(), -1500)
+        Notify("Numpad grid layer: L" (MiniGridLayer ? "2" : "1"), 1500)
     } else {
         ; Reuse DispatchMacro with a synthesized layer-aware grid command, so the
         ; numpad drives the exact same actions as the hardware ButtonGrid.
